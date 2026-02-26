@@ -1,15 +1,14 @@
 import {
   ChatInputCommandInteraction,
-  PermissionFlagsBits,
   SlashCommandBuilder,
 } from 'discord.js';
 import { getSettings, saveSettings } from '../database';
 import { t } from '../i18n';
+import { checkAdminPermission } from '../utils/permissions';
 
 export const data = new SlashCommandBuilder()
   .setName('channelset')
   .setDescription('Set the warning channel / 警告チャンネルを設定')
-  .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild)
   .setDescriptionLocalizations({ ja: '警告チャンネルを設定', 'en-US': 'Set the warning channel' })
   .addChannelOption((o) =>
     o
@@ -22,6 +21,8 @@ export const data = new SlashCommandBuilder()
   );
 
 export async function execute(interaction: ChatInputCommandInteraction): Promise<void> {
+  if (!(await checkAdminPermission(interaction))) return;
+
   const guildId = interaction.guildId!;
   const settings = getSettings(guildId);
   const lang = settings.language;

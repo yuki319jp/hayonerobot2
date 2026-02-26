@@ -40,6 +40,7 @@ export const DEFAULT_SETTINGS: Omit<ServerSettings, 'guildId'> = {
   warnHour: 0,
   warnMinute: 0,
   customMessage: null,
+  allowedRoleId: null,
 };
 
 export function getSettings(guildId: string): ServerSettings {

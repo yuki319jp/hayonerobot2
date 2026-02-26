@@ -8,6 +8,7 @@ export interface ServerSettings {
   warnHour: number;   // 0-23, hour to start warning (default: 0 = midnight)
   warnMinute: number; // 0-59, minute to start warning (default: 0)
   customMessage: string | null;
+  allowedRoleId: string | null; // role allowed to use admin commands
 }
 
 export interface EncryptedRow {

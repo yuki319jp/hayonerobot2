@@ -25,6 +25,7 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
         t(lang, 'help.message'),
         t(lang, 'help.mention'),
         t(lang, 'help.settings'),
+        t(lang, 'help.schedule'),
       ].join('\n') }
     )
     .setColor(0x5865f2)

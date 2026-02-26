@@ -35,6 +35,7 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
       { name: t(lang, 'settings.channel'), value: channelDisplay, inline: true },
       { name: t(lang, 'settings.mention'), value: s.mentionEnabled ? t(lang, 'settings.on') : t(lang, 'settings.off'), inline: true },
       { name: t(lang, 'settings.mention_target'), value: mentionTargetDisplay, inline: true },
+      { name: t(lang, 'settings.allowed_role'), value: s.allowedRoleId ? `<@&${s.allowedRoleId}>` : t(lang, 'settings.none'), inline: true },
       { name: t(lang, 'settings.custom_message'), value: msgDisplay }
     )
     .setColor(0x5865f2)
