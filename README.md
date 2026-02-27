@@ -209,4 +209,5 @@ npm start
 
 ---
 
-License: GNU Public License 3.0
+License: GPL-3.0
+Made by yuki319jp with AI
