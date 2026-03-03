@@ -119,7 +119,7 @@ async function handleModalSubmit(interaction: ModalSubmitInteraction): Promise<v
 }
 
 async function main(): Promise<void> {
-  initDatabase();
+  await initDatabase();
   console.log('✅ Database initialized');
 
   const token = process.env.DISCORD_TOKEN;
