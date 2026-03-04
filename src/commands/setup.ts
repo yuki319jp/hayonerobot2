@@ -1,235 +1,189 @@
 import {
   ActionRowBuilder,
+  ButtonBuilder,
+  ButtonStyle,
+  ChannelSelectMenuBuilder,
+  ChannelType,
   ChatInputCommandInteraction,
-  ModalBuilder,
+  EmbedBuilder,
+  RoleSelectMenuBuilder,
   SlashCommandBuilder,
-  TextInputBuilder,
-  TextInputStyle,
+  StringSelectMenuBuilder,
 } from 'discord.js';
-import { getSettings, saveSettings } from '../database';
-import { t } from '../i18n';
+import { getSettings } from '../database';
+import { ServerSettings } from '../types';
 import { checkAdminPermission } from '../utils/permissions';
 
 export const data = new SlashCommandBuilder()
   .setName('setup')
   .setDescription('Bot setup / Botの設定')
-  .setDescriptionLocalizations({ ja: 'Botの設定', 'en-US': 'Bot setup' })
-  .addBooleanOption((o) =>
-    o
-      .setName('form')
-      .setDescription('Open interactive setup form / フォームで設定する')
-      .setDescriptionLocalizations({ ja: 'フォームで設定する', 'en-US': 'Open interactive setup form' })
-  )
-  .addStringOption((o) =>
-    o
-      .setName('language')
-      .setDescription('Bot language / 言語選択')
-      .setDescriptionLocalizations({ ja: '言語選択', 'en-US': 'Bot language' })
-      .addChoices(
-        { name: '日本語', value: 'ja' },
-        { name: 'English', value: 'en' }
-      )
-  )
-  .addBooleanOption((o) =>
-    o
-      .setName('enabled')
-      .setDescription('Enable or disable warnings / 警告の有効・無効')
-      .setDescriptionLocalizations({ ja: '警告の有効・無効', 'en-US': 'Enable or disable warnings' })
-  )
-  .addIntegerOption((o) =>
-    o
-      .setName('warn_hour')
-      .setDescription('Warning hour (0-23) / 警告時刻（時・0-23）')
-      .setDescriptionLocalizations({ ja: '警告時刻（時・0-23）', 'en-US': 'Warning hour (0-23)' })
-      .setMinValue(0)
-      .setMaxValue(23)
-  )
-  .addIntegerOption((o) =>
-    o
-      .setName('warn_minute')
-      .setDescription('Warning minute (0-59) / 警告時刻（分・0-59）')
-      .setDescriptionLocalizations({ ja: '警告時刻（分・0-59）', 'en-US': 'Warning minute (0-59)' })
-      .setMinValue(0)
-      .setMaxValue(59)
-  )
-  .addChannelOption((o) =>
-    o
-      .setName('channel')
-      .setDescription('Warning channel (leave empty to clear) / 警告チャンネル（空でクリア）')
-      .setDescriptionLocalizations({
-        ja: '警告チャンネル（空でクリア）',
-        'en-US': 'Warning channel (leave empty to clear)',
-      })
-  )
-  .addRoleOption((o) =>
-    o
-      .setName('allowed_role')
-      .setDescription('Role allowed to use admin commands / 管理コマンドを使えるロール')
-      .setDescriptionLocalizations({
-        ja: '管理コマンドを使えるロール',
-        'en-US': 'Role allowed to use admin commands',
-      })
-  )
-  .addBooleanOption((o) =>
-    o
-      .setName('clear_allowed_role')
-      .setDescription('Clear the allowed role setting / コマンド実行ロール設定をクリア')
-      .setDescriptionLocalizations({
-        ja: 'コマンド実行ロール設定をクリア',
-        'en-US': 'Clear the allowed role setting',
-      })
-  )
-  .addBooleanOption((o) =>
-    o
-      .setName('mention_enabled')
-      .setDescription('Enable or disable mentions / メンションの有効・無効')
-      .setDescriptionLocalizations({
-        ja: 'メンションの有効・無効',
-        'en-US': 'Enable or disable mentions',
-      })
-  )
-  .addRoleOption((o) =>
-    o
-      .setName('mention_role')
-      .setDescription('Role to mention / メンションするロール')
-      .setDescriptionLocalizations({ ja: 'メンションするロール', 'en-US': 'Role to mention' })
-  )
-  .addUserOption((o) =>
-    o
-      .setName('mention_user')
-      .setDescription('User to mention (ignored if role set) / メンションするユーザー（ロール優先）')
-      .setDescriptionLocalizations({
-        ja: 'メンションするユーザー（ロール優先）',
-        'en-US': 'User to mention (ignored if role set)',
-      })
+  .setDescriptionLocalizations({ ja: 'Botの設定', 'en-US': 'Bot setup' });
+
+function getMentionTargetDisplay(settings: ServerSettings): string {
+  const isJa = settings.language === 'ja';
+  if (!settings.mentionTarget || settings.mentionTarget === 'none') {
+    return isJa ? '🔕 なし' : '🔕 None';
+  }
+  if (settings.mentionTarget === 'online') {
+    return isJa ? '🌐 オンラインユーザー全員' : '🌐 All online users';
+  }
+  if (settings.mentionTarget.startsWith('role:')) {
+    return `<@&${settings.mentionTarget.slice(5)}>`;
+  }
+  return `<@${settings.mentionTarget}>`;
+}
+
+export function buildSetupMessage(settings: ServerSettings): {
+  embeds: EmbedBuilder[];
+  components: ActionRowBuilder<any>[];
+} {
+  const isJa = settings.language === 'ja';
+  const warnTime = `${String(settings.warnHour).padStart(2, '0')}:${String(settings.warnMinute).padStart(2, '0')}`;
+
+  const embed = new EmbedBuilder()
+    .setTitle(isJa ? '🛠️ セットアップ' : '🛠️ Bot Setup')
+    .setDescription(
+      isJa
+        ? '以下のコンポーネントで設定を変更できます。変更はすぐに反映されます。'
+        : 'Use the components below to change settings. Changes apply immediately.'
+    )
+    .addFields(
+      {
+        name: isJa ? '有効' : 'Enabled',
+        value: settings.enabled ? '✅ ON' : '❌ OFF',
+        inline: true,
+      },
+      {
+        name: isJa ? '警告時刻' : 'Warn Time',
+        value: warnTime,
+        inline: true,
+      },
+      {
+        name: isJa ? '通知チャンネル' : 'Channel',
+        value: settings.channelId ? `<#${settings.channelId}>` : (isJa ? '未設定' : 'Not set'),
+        inline: true,
+      },
+      {
+        name: isJa ? 'メンション' : 'Mention',
+        value: settings.mentionEnabled ? '🔔 ON' : '🔕 OFF',
+        inline: true,
+      },
+      {
+        name: isJa ? 'メンション対象' : 'Mention Target',
+        value: getMentionTargetDisplay(settings),
+        inline: true,
+      },
+      {
+        name: isJa ? 'カスタムメッセージ' : 'Custom Message',
+        value: settings.customMessage
+          ? settings.customMessage.substring(0, 60) + (settings.customMessage.length > 60 ? '…' : '')
+          : (isJa ? '*(デフォルト)*' : '*(default)*'),
+        inline: false,
+      }
+    )
+    .setColor(0x5865f2)
+    .setFooter({ text: 'Hayonero2' });
+
+  const rows: ActionRowBuilder<any>[] = [];
+
+  // Row 1: Channel select
+  const channelSelect = new ChannelSelectMenuBuilder()
+    .setCustomId('setup_channel_select')
+    .setPlaceholder(isJa ? '通知チャンネルを選択してください' : 'Select notification channel')
+    .addChannelTypes(ChannelType.GuildText)
+    .setMinValues(0)
+    .setMaxValues(1);
+  if (settings.channelId) {
+    channelSelect.setDefaultChannels([settings.channelId]);
+  }
+  rows.push(new ActionRowBuilder<ChannelSelectMenuBuilder>().addComponents(channelSelect));
+
+  // Row 2: Mention target type select
+  const isOnline = settings.mentionTarget === 'online';
+  const isRole = typeof settings.mentionTarget === 'string' && settings.mentionTarget.startsWith('role:');
+  const isNone = !settings.mentionTarget || settings.mentionTarget === 'none';
+
+  const mentionTargetSelect = new StringSelectMenuBuilder()
+    .setCustomId('setup_mention_target')
+    .setPlaceholder(isJa ? 'メンション対象を選択' : 'Select mention target')
+    .addOptions([
+      {
+        label: isJa ? 'オンラインユーザー全員' : 'All online users',
+        description: isJa ? 'オンライン・退席中・取り込み中のユーザー' : 'Online, idle, and DND users',
+        value: 'online',
+        emoji: '🌐',
+        default: isOnline,
+      },
+      {
+        label: isJa ? 'ロールでメンション' : 'Mention by role',
+        description: isJa ? '特定のロールをメンション' : 'Mention a specific role',
+        value: 'role',
+        emoji: '🎭',
+        default: isRole,
+      },
+      {
+        label: isJa ? 'メンションなし' : 'No mention',
+        description: isJa ? 'メンションを無効にする' : 'Disable mentions',
+        value: 'none',
+        emoji: '🔕',
+        default: isNone,
+      },
+    ]);
+  rows.push(new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(mentionTargetSelect));
+
+  // Row 3 (conditional): Role select when target type is 'role'
+  if (isRole) {
+    const roleSelect = new RoleSelectMenuBuilder()
+      .setCustomId('setup_role_select')
+      .setPlaceholder(isJa ? 'メンションするロールを選択' : 'Select role to mention')
+      .setMinValues(1)
+      .setMaxValues(1);
+    if (settings.mentionTarget && settings.mentionTarget.startsWith('role:')) {
+      const roleId = settings.mentionTarget.slice(5);
+      if (roleId) roleSelect.setDefaultRoles([roleId]);
+    }
+    rows.push(new ActionRowBuilder<RoleSelectMenuBuilder>().addComponents(roleSelect));
+  }
+
+  // Next row: Enable/Disable + Time & Message buttons
+  const enableBtn = new ButtonBuilder()
+    .setCustomId('setup_enable')
+    .setLabel(isJa ? '有効化' : 'Enable')
+    .setStyle(settings.enabled ? ButtonStyle.Success : ButtonStyle.Secondary);
+  const disableBtn = new ButtonBuilder()
+    .setCustomId('setup_disable')
+    .setLabel(isJa ? '無効化' : 'Disable')
+    .setStyle(!settings.enabled ? ButtonStyle.Danger : ButtonStyle.Secondary);
+  const timeMsgBtn = new ButtonBuilder()
+    .setCustomId('setup_time_msg')
+    .setLabel(isJa ? '⏰ 時刻・メッセージ設定' : '⏰ Time & Message')
+    .setStyle(ButtonStyle.Primary);
+  rows.push(
+    new ActionRowBuilder<ButtonBuilder>().addComponents(enableBtn, disableBtn, timeMsgBtn)
   );
+
+  // Last row: Mention ON/OFF
+  const mentionOnBtn = new ButtonBuilder()
+    .setCustomId('setup_mention_on')
+    .setLabel(isJa ? '🔔 メンションON' : '🔔 Mention ON')
+    .setStyle(settings.mentionEnabled ? ButtonStyle.Success : ButtonStyle.Secondary);
+  const mentionOffBtn = new ButtonBuilder()
+    .setCustomId('setup_mention_off')
+    .setLabel(isJa ? '🔕 メンションOFF' : '🔕 Mention OFF')
+    .setStyle(!settings.mentionEnabled ? ButtonStyle.Danger : ButtonStyle.Secondary);
+  rows.push(
+    new ActionRowBuilder<ButtonBuilder>().addComponents(mentionOnBtn, mentionOffBtn)
+  );
+
+  return { embeds: [embed], components: rows };
+}
 
 export async function execute(interaction: ChatInputCommandInteraction): Promise<void> {
   if (!(await checkAdminPermission(interaction))) return;
 
   const guildId = interaction.guildId!;
   const settings = getSettings(guildId);
+  const { embeds, components } = buildSetupMessage(settings);
 
-  const useForm = interaction.options.getBoolean('form');
-
-  if (useForm) {
-    const warnTime = `${String(settings.warnHour).padStart(2, '0')}:${String(settings.warnMinute).padStart(2, '0')}`;
-
-    const modal = new ModalBuilder()
-      .setCustomId('setup_modal')
-      .setTitle(settings.language === 'ja' ? 'Botセットアップ' : 'Bot Setup');
-
-    const languageInput = new TextInputBuilder()
-      .setCustomId('language')
-      .setLabel(settings.language === 'ja' ? '言語 (ja / en)' : 'Language (ja / en)')
-      .setStyle(TextInputStyle.Short)
-      .setValue(settings.language)
-      .setMinLength(2)
-      .setMaxLength(2)
-      .setRequired(true);
-
-    const enabledInput = new TextInputBuilder()
-      .setCustomId('enabled')
-      .setLabel(settings.language === 'ja' ? '有効 (on / off)' : 'Enabled (on / off)')
-      .setStyle(TextInputStyle.Short)
-      .setValue(settings.enabled ? 'on' : 'off')
-      .setMinLength(2)
-      .setMaxLength(3)
-      .setRequired(true);
-
-    const warnTimeInput = new TextInputBuilder()
-      .setCustomId('warn_time')
-      .setLabel(settings.language === 'ja' ? '警告時刻 (HH:MM)' : 'Warning time (HH:MM)')
-      .setStyle(TextInputStyle.Short)
-      .setValue(warnTime)
-      .setMinLength(4)
-      .setMaxLength(5)
-      .setRequired(true);
-
-    const channelIdInput = new TextInputBuilder()
-      .setCustomId('channel_id')
-      .setLabel(settings.language === 'ja' ? 'チャンネルID（空でクリア）' : 'Channel ID (empty to clear)')
-      .setStyle(TextInputStyle.Short)
-      .setValue(settings.channelId ?? '')
-      .setRequired(false);
-
-    const customMessageInput = new TextInputBuilder()
-      .setCustomId('custom_message')
-      .setLabel(settings.language === 'ja' ? 'カスタムメッセージ（空でデフォルト）' : 'Custom message (empty = default)')
-      .setStyle(TextInputStyle.Paragraph)
-      .setValue(settings.customMessage ?? '')
-      .setMaxLength(500)
-      .setRequired(false);
-
-    modal.addComponents(
-      new ActionRowBuilder<TextInputBuilder>().addComponents(languageInput),
-      new ActionRowBuilder<TextInputBuilder>().addComponents(enabledInput),
-      new ActionRowBuilder<TextInputBuilder>().addComponents(warnTimeInput),
-      new ActionRowBuilder<TextInputBuilder>().addComponents(channelIdInput),
-      new ActionRowBuilder<TextInputBuilder>().addComponents(customMessageInput),
-    );
-
-    await interaction.showModal(modal);
-    return;
-  }
-
-  // Option-based setup
-  const lang = settings.language;
-  const language = interaction.options.getString('language') as 'ja' | 'en' | null;
-  const enabled = interaction.options.getBoolean('enabled');
-  const warnHour = interaction.options.getInteger('warn_hour');
-  const warnMinute = interaction.options.getInteger('warn_minute');
-  const channel = interaction.options.getChannel('channel');
-  const allowedRole = interaction.options.getRole('allowed_role');
-  const clearAllowedRole = interaction.options.getBoolean('clear_allowed_role');
-  const mentionEnabled = interaction.options.getBoolean('mention_enabled');
-  const mentionRole = interaction.options.getRole('mention_role');
-  const mentionUser = interaction.options.getUser('mention_user');
-
-  const messages: string[] = [];
-
-  if (language !== null) {
-    settings.language = language;
-    messages.push(
-      t(language, 'setup.language_set', { lang: language === 'ja' ? '日本語' : 'English' })
-    );
-  }
-  if (enabled !== null) {
-    settings.enabled = enabled;
-    messages.push(t(settings.language, enabled ? 'setup.enabled' : 'setup.disabled'));
-  }
-  if (warnHour !== null) settings.warnHour = warnHour;
-  if (warnMinute !== null) settings.warnMinute = warnMinute;
-  if (warnHour !== null || warnMinute !== null) {
-    messages.push(`⏰ ${String(settings.warnHour).padStart(2, '0')}:${String(settings.warnMinute).padStart(2, '0')}`);
-  }
-  if (channel !== null) {
-    settings.channelId = channel.id;
-    messages.push(t(settings.language, 'setup.channel_set', { channel: `<#${channel.id}>` }));
-  }
-  if (clearAllowedRole) {
-    settings.allowedRoleId = null;
-    messages.push(t(settings.language, 'setup.role_cleared'));
-  } else if (allowedRole !== null) {
-    settings.allowedRoleId = allowedRole.id;
-    messages.push(t(settings.language, 'setup.role_set', { role: `<@&${allowedRole.id}>` }));
-  }
-  if (mentionEnabled !== null) {
-    settings.mentionEnabled = mentionEnabled;
-    if (mentionEnabled) {
-      if (mentionRole) {
-        settings.mentionTarget = `role:${mentionRole.id}`;
-      } else if (mentionUser) {
-        settings.mentionTarget = mentionUser.id;
-      }
-    }
-    messages.push(t(settings.language, 'setup.mention_set'));
-  }
-
-  if (messages.length === 0) {
-    messages.push(t(lang, 'setup.success'));
-  }
-
-  saveSettings(settings);
-  await interaction.reply({ content: messages.join('\n'), ephemeral: true });
+  await interaction.reply({ embeds, components, ephemeral: true });
 }

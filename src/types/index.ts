@@ -4,7 +4,10 @@ export interface ServerSettings {
   enabled: boolean;
   channelId: string | null;
   mentionEnabled: boolean;
-  mentionTarget: string | null; // role ID or user ID
+  /** 'online' = all online users, 'role:ROLEID' = role, 'USERID' = user, null = none */
+  mentionTarget: string | null;
+  /** user IDs who opted out of mentions */
+  excludedUserIds: string[];
   warnHour: number;   // 0-23, hour to start warning (default: 0 = midnight)
   warnMinute: number; // 0-59, minute to start warning (default: 0)
   customMessage: string | null;
