@@ -177,6 +177,11 @@ async function handleSetupComponent(
     console.error(`[SetupComponent:${customId}]`, err);
     try {
       const errMsg = t(settings.language, 'error.general');
+      // After showModal, interaction cannot be replied to; skip error reply
+      if (customId === 'setup_time_msg') {
+        return;
+      }
+      // For other components, check state before replying
       if ((interaction as MessageComponentInteraction).replied || (interaction as MessageComponentInteraction).deferred) {
         await (interaction as MessageComponentInteraction).followUp({ content: errMsg, ephemeral: true });
       } else {
@@ -232,7 +237,15 @@ async function handleModalSubmit(interaction: ModalSubmitInteraction): Promise<v
       }
     } catch (err) {
       console.error('[ModalSubmit:setup_config_modal]', err);
-      await interaction.reply({ content: t(settings.language, 'error.general'), ephemeral: true });
+      try {
+        const errMsg = t(settings.language, 'error.general');
+        // Modal submission hasn't sent response yet, safe to reply
+        if (interaction.replied || interaction.deferred) {
+          await interaction.followUp({ content: errMsg, ephemeral: true });
+        } else {
+          await interaction.reply({ content: errMsg, ephemeral: true });
+        }
+      } catch (_) { /* ignore */ }
     }
     return;
   }
