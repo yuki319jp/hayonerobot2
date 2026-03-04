@@ -28,7 +28,12 @@ function getMentionTargetDisplay(settings: ServerSettings): string {
     return isJa ? '🌐 オンラインユーザー全員' : '🌐 All online users';
   }
   if (settings.mentionTarget.startsWith('role:')) {
-    return `<@&${settings.mentionTarget.slice(5)}>`;
+    const roleId = settings.mentionTarget.slice(5);
+    // Validate that roleId is not empty
+    if (!roleId) {
+      return isJa ? '🎭 ロール未設定' : '🎭 Role not set';
+    }
+    return `<@&${roleId}>`;
   }
   return `<@${settings.mentionTarget}>`;
 }
