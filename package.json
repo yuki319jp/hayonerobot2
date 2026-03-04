@@ -34,5 +34,9 @@
     "@types/sql.js": "^1.4.9",
     "ts-node": "^10.9.2",
     "typescript": "^5.9.3"
+  },
+  "overrides": {
+    "discord.js": "^14.25.1",
+    "undici": "^6.23.0"
   }
 }
