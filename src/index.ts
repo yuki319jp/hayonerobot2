@@ -88,7 +88,7 @@ async function handleSetupComponent(
   if (!interaction.guildId) return;
 
   // Permission check for setup components
-  if (!(await checkAdminPermission(interaction as any))) return;
+  if (!(await checkAdminPermission(interaction as MessageComponentInteraction))) return;
 
   const guildId = interaction.guildId;
   const settings = getSettings(guildId);
