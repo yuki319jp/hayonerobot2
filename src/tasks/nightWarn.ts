@@ -8,6 +8,17 @@ import { defaultMessage } from '../i18n';
  * Reschedules when settings change by calling this function again.
  * Uses a per-guild map so old tasks are destroyed before rescheduling.
  */
+/**
+ * Maximum number of online users to mention per message.
+ * Prevents message length exceeding 2000 chars and helps with API limits.
+ */
+const MAX_ONLINE_MENTIONS = 50;
+
+/**
+ * Timeout for fetching members with presences (in milliseconds).
+ */
+const FETCH_MEMBERS_TIMEOUT = 5000;
+
 const scheduledTasks: Map<string, ScheduledTask> = new Map();
 
 export function rescheduleGuild(client: Client, guildId: string): void {
@@ -96,6 +107,7 @@ function truncateMentions(mentions: string, maxLength: number): string {
 /**
  * Fetches all online (non-offline) guild members and returns a mention string.
  * Bots and users in excludedUserIds are excluded.
+ * Limits mentions to MAX_ONLINE_MENTIONS to prevent message overflow.
  * Requires GatewayIntentBits.GuildPresences and GatewayIntentBits.GuildMembers.
  */
 async function buildOnlineMentions(
@@ -105,23 +117,33 @@ async function buildOnlineMentions(
 ): Promise<string> {
   try {
     const guild = await client.guilds.fetch(guildId);
-    // Fetch all members with their presence data
-    const members = await guild.members.fetch({ withPresences: true });
+    
+    // Fetch with timeout to avoid hanging on large guilds
+    const fetchPromise = guild.members.fetch({ withPresences: true });
+    const timeoutPromise = new Promise<never>((_, reject) =>
+      setTimeout(() => reject(new Error('Fetch timeout')), FETCH_MEMBERS_TIMEOUT)
+    );
+    
+    const members = await Promise.race([fetchPromise, timeoutPromise]);
 
     const onlineStatuses: PresenceStatus[] = ['online', 'idle', 'dnd'];
 
-    const mentions = members
+    const onlineMembers = members
       .filter((member: GuildMember) => {
         if (member.user.bot) return false;
         if (excludedUserIds.includes(member.id)) return false;
         const presence = member.presence;
         if (!presence) return false;
         return onlineStatuses.includes(presence.status);
-      })
+      });
+
+    // Limit mentions to MAX_ONLINE_MENTIONS to prevent message overflow
+    const mentionList = Array.from(onlineMembers.values())
+      .slice(0, MAX_ONLINE_MENTIONS)
       .map((member: GuildMember) => `<@${member.id}>`)
       .join(' ');
 
-    return mentions ? mentions + ' ' : '';
+    return mentionList ? mentionList + ' ' : '';
   } catch (err) {
     console.error(`[NightWarn] Failed to fetch online members for guild ${guildId}:`, err);
     return '';
