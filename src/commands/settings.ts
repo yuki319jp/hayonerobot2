@@ -17,11 +17,13 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
   const lang = s.language;
 
   const channelDisplay = s.channelId ? `<#${s.channelId}>` : t(lang, 'settings.none');
-  const mentionTargetDisplay = s.mentionTarget
-    ? s.mentionTarget.startsWith('role:')
-      ? `<@&${s.mentionTarget.slice(5)}>`
-      : `<@${s.mentionTarget}>`
-    : t(lang, 'settings.none');
+  const mentionTargetDisplay = !s.mentionTarget || s.mentionTarget === 'none'
+    ? t(lang, 'settings.none')
+    : s.mentionTarget === 'online'
+    ? (lang === 'ja' ? '🌐 オンラインユーザー全員' : '🌐 All online users')
+    : s.mentionTarget.startsWith('role:')
+    ? `<@&${s.mentionTarget.slice(5)}>`
+    : `<@${s.mentionTarget}>`;
 
   const warnTime = `${String(s.warnHour).padStart(2, '0')}:${String(s.warnMinute).padStart(2, '0')}`;
   const msgDisplay = s.customMessage ?? `*(${lang === 'ja' ? 'デフォルト' : 'default'})*`;

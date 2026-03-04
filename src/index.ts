@@ -1,18 +1,34 @@
 import 'dotenv/config';
 import {
+  ActionRowBuilder,
+  AnySelectMenuInteraction,
+  ButtonInteraction,
+  ChannelSelectMenuInteraction,
   Client,
   GatewayIntentBits,
   Interaction,
   Events,
+  MessageComponentInteraction,
+  ModalBuilder,
   ModalSubmitInteraction,
+  RoleSelectMenuInteraction,
+  StringSelectMenuInteraction,
+  TextInputBuilder,
+  TextInputStyle,
 } from 'discord.js';
 import { initDatabase, getSettings, saveSettings } from './database';
 import { commands } from './commands';
 import { scheduleAll, rescheduleGuild } from './tasks/nightWarn';
 import { t } from './i18n';
+import { buildSetupMessage } from './commands/setup';
+import { checkAdminPermission } from './utils/permissions';
 
 const client = new Client({
-  intents: [GatewayIntentBits.Guilds],
+  intents: [
+    GatewayIntentBits.Guilds,
+    GatewayIntentBits.GuildMembers,
+    GatewayIntentBits.GuildPresences,
+  ],
 });
 
 client.once(Events.ClientReady, (readyClient) => {
@@ -23,6 +39,18 @@ client.once(Events.ClientReady, (readyClient) => {
 client.on(Events.InteractionCreate, async (interaction: Interaction) => {
   if (interaction.isModalSubmit()) {
     await handleModalSubmit(interaction as ModalSubmitInteraction);
+    return;
+  }
+
+  // Handle setup component interactions
+  if (
+    (interaction.isButton() ||
+      interaction.isChannelSelectMenu() ||
+      interaction.isStringSelectMenu() ||
+      interaction.isRoleSelectMenu()) &&
+    interaction.customId.startsWith('setup_')
+  ) {
+    await handleSetupComponent(interaction as AnySelectMenuInteraction | ButtonInteraction);
     return;
   }
 
@@ -54,31 +82,118 @@ client.on(Events.InteractionCreate, async (interaction: Interaction) => {
   }
 });
 
+async function handleSetupComponent(
+  interaction: AnySelectMenuInteraction | ButtonInteraction
+): Promise<void> {
+  if (!interaction.guildId) return;
+
+  // Permission check for setup components
+  if (!(await checkAdminPermission(interaction as any))) return;
+
+  const guildId = interaction.guildId;
+  const settings = getSettings(guildId);
+  const customId = interaction.customId;
+
+  try {
+    if (customId === 'setup_channel_select') {
+      const sel = interaction as ChannelSelectMenuInteraction;
+      settings.channelId = sel.values[0] ?? null;
+      saveSettings(settings);
+      rescheduleGuild(client, guildId);
+    } else if (customId === 'setup_mention_target') {
+      const sel = interaction as StringSelectMenuInteraction;
+      const value = sel.values[0];
+      if (value === 'online') {
+        settings.mentionTarget = 'online';
+      } else if (value === 'none') {
+        settings.mentionTarget = null;
+      } else if (value === 'role') {
+        // Keep existing role target or mark as "role pending selection"
+        if (!settings.mentionTarget?.startsWith('role:')) {
+          settings.mentionTarget = 'role:';
+        }
+      }
+      saveSettings(settings);
+    } else if (customId === 'setup_role_select') {
+      const sel = interaction as RoleSelectMenuInteraction;
+      settings.mentionTarget = `role:${sel.values[0]}`;
+      saveSettings(settings);
+    } else if (customId === 'setup_enable') {
+      settings.enabled = true;
+      saveSettings(settings);
+      rescheduleGuild(client, guildId);
+    } else if (customId === 'setup_disable') {
+      settings.enabled = false;
+      saveSettings(settings);
+      rescheduleGuild(client, guildId);
+    } else if (customId === 'setup_mention_on') {
+      settings.mentionEnabled = true;
+      saveSettings(settings);
+    } else if (customId === 'setup_mention_off') {
+      settings.mentionEnabled = false;
+      saveSettings(settings);
+    } else if (customId === 'setup_time_msg') {
+      // Open modal for time and message configuration
+      const isJa = settings.language === 'ja';
+      const warnTime = `${String(settings.warnHour).padStart(2, '0')}:${String(settings.warnMinute).padStart(2, '0')}`;
+
+      const modal = new ModalBuilder()
+        .setCustomId('setup_config_modal')
+        .setTitle(isJa ? '時刻・メッセージ設定' : 'Time & Message Settings');
+
+      const warnTimeInput = new TextInputBuilder()
+        .setCustomId('warn_time')
+        .setLabel(isJa ? '警告時刻 (HH:MM)' : 'Warning Time (HH:MM)')
+        .setStyle(TextInputStyle.Short)
+        .setValue(warnTime)
+        .setMinLength(4)
+        .setMaxLength(5)
+        .setRequired(true);
+
+      const customMessageInput = new TextInputBuilder()
+        .setCustomId('custom_message')
+        .setLabel(
+          isJa ? 'カスタムメッセージ（空でデフォルト）' : 'Custom message (empty = default)'
+        )
+        .setStyle(TextInputStyle.Paragraph)
+        .setValue(settings.customMessage ?? '')
+        .setMaxLength(500)
+        .setRequired(false);
+
+      modal.addComponents(
+        new ActionRowBuilder<TextInputBuilder>().addComponents(warnTimeInput),
+        new ActionRowBuilder<TextInputBuilder>().addComponents(customMessageInput)
+      );
+
+      await (interaction as ButtonInteraction).showModal(modal);
+      return; // do not call interaction.update() after showModal
+    }
+
+    // Update the setup message with refreshed settings
+    const updatedSettings = getSettings(guildId);
+    const { embeds, components } = buildSetupMessage(updatedSettings);
+    await (interaction as MessageComponentInteraction).update({ embeds, components });
+  } catch (err) {
+    console.error(`[SetupComponent:${customId}]`, err);
+    try {
+      const errMsg = t(settings.language, 'error.general');
+      if ((interaction as MessageComponentInteraction).replied || (interaction as MessageComponentInteraction).deferred) {
+        await (interaction as MessageComponentInteraction).followUp({ content: errMsg, ephemeral: true });
+      } else {
+        await (interaction as MessageComponentInteraction).reply({ content: errMsg, ephemeral: true });
+      }
+    } catch (_) { /* ignore */ }
+  }
+}
+
 async function handleModalSubmit(interaction: ModalSubmitInteraction): Promise<void> {
   if (!interaction.guildId) return;
 
-  if (interaction.customId === 'setup_modal') {
+  if (interaction.customId === 'setup_config_modal') {
     const guildId = interaction.guildId;
     const settings = getSettings(guildId);
-    const lang = settings.language;
-    const messages: string[] = [];
 
     try {
-      const languageVal = interaction.fields.getTextInputValue('language').trim().toLowerCase();
-      if (languageVal === 'ja' || languageVal === 'en') {
-        settings.language = languageVal;
-        messages.push(t(languageVal, 'setup.language_set', { lang: languageVal === 'ja' ? '日本語' : 'English' }));
-      }
-
-      const enabledVal = interaction.fields.getTextInputValue('enabled').trim().toLowerCase();
-      if (enabledVal === 'on' || enabledVal === 'true' || enabledVal === '1') {
-        settings.enabled = true;
-        messages.push(t(settings.language, 'setup.enabled'));
-      } else if (enabledVal === 'off' || enabledVal === 'false' || enabledVal === '0') {
-        settings.enabled = false;
-        messages.push(t(settings.language, 'setup.disabled'));
-      }
-
       const warnTimeVal = interaction.fields.getTextInputValue('warn_time').trim();
       const timeMatch = warnTimeVal.match(/^(\d{1,2}):(\d{2})$/);
       if (timeMatch) {
@@ -87,21 +202,19 @@ async function handleModalSubmit(interaction: ModalSubmitInteraction): Promise<v
         if (h >= 0 && h <= 23 && m >= 0 && m <= 59) {
           settings.warnHour = h;
           settings.warnMinute = m;
-          messages.push(`⏰ ${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`);
         } else {
-          messages.push(t(settings.language, 'error.invalid_time'));
+          await interaction.reply({
+            content: t(settings.language, 'error.invalid_time'),
+            ephemeral: true,
+          });
+          return;
         }
       } else {
-        messages.push(t(settings.language, 'error.invalid_time'));
-      }
-
-      const channelIdVal = interaction.fields.getTextInputValue('channel_id').trim();
-      if (channelIdVal) {
-        settings.channelId = channelIdVal;
-        messages.push(t(settings.language, 'setup.channel_set', { channel: `<#${channelIdVal}>` }));
-      } else {
-        settings.channelId = null;
-        messages.push(t(settings.language, 'setup.channel_cleared'));
+        await interaction.reply({
+          content: t(settings.language, 'error.invalid_time'),
+          ephemeral: true,
+        });
+        return;
       }
 
       const customMsgVal = interaction.fields.getTextInputValue('custom_message').trim();
@@ -110,11 +223,18 @@ async function handleModalSubmit(interaction: ModalSubmitInteraction): Promise<v
       saveSettings(settings);
       rescheduleGuild(client, guildId);
 
-      await interaction.reply({ content: messages.join('\n'), ephemeral: true });
+      const { embeds, components } = buildSetupMessage(settings);
+      // Update original setup message if triggered from a component, otherwise reply
+      if (interaction.isFromMessage()) {
+        await interaction.update({ embeds, components });
+      } else {
+        await interaction.reply({ embeds, components, ephemeral: true });
+      }
     } catch (err) {
-      console.error('[ModalSubmit:setup_modal]', err);
-      await interaction.reply({ content: t(lang, 'error.general'), ephemeral: true });
+      console.error('[ModalSubmit:setup_config_modal]', err);
+      await interaction.reply({ content: t(settings.language, 'error.general'), ephemeral: true });
     }
+    return;
   }
 }
 

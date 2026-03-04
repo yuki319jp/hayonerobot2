@@ -51,6 +51,7 @@ export const DEFAULT_SETTINGS: Omit<ServerSettings, 'guildId'> = {
   channelId: null,
   mentionEnabled: false,
   mentionTarget: null,
+  excludedUserIds: [],
   warnHour: 0,
   warnMinute: 0,
   customMessage: null,
@@ -65,7 +66,12 @@ export function getSettings(guildId: string): ServerSettings {
   if (stmt.step()) {
     const row = stmt.getAsObject() as { data: string; iv: string; tag: string };
     stmt.free();
-    return decrypt(guildId, row as EncryptedPayload);
+    const result = decrypt(guildId, row as EncryptedPayload);
+    // backward compatibility: ensure excludedUserIds is always an array
+    if (!Array.isArray(result.excludedUserIds)) {
+      result.excludedUserIds = [];
+    }
+    return result;
   }
   
   stmt.free();
