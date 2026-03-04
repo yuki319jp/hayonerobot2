@@ -11,6 +11,7 @@ import {
   MessageComponentInteraction,
   ModalBuilder,
   ModalSubmitInteraction,
+  RoleSelectMenuBuilder,
   RoleSelectMenuInteraction,
   StringSelectMenuInteraction,
   TextInputBuilder,
@@ -105,15 +106,23 @@ async function handleSetupComponent(
       const value = sel.values[0];
       if (value === 'online') {
         settings.mentionTarget = 'online';
+        saveSettings(settings);
       } else if (value === 'none') {
         settings.mentionTarget = null;
+        saveSettings(settings);
       } else if (value === 'role') {
-        // Keep existing role target or mark as "role pending selection"
-        if (!settings.mentionTarget?.startsWith('role:')) {
-          settings.mentionTarget = 'role:';
-        }
+        // Show RoleSelectMenu but don't save incomplete value to DB yet
+        const isJa = settings.language === 'ja';
+        const roleSelect = new RoleSelectMenuBuilder()
+          .setCustomId('setup_role_select')
+          .setPlaceholder(isJa ? 'メンションするロールを選択' : 'Select role to mention')
+          .setMinValues(1)
+          .setMaxValues(1);
+        
+        const row = new ActionRowBuilder<RoleSelectMenuBuilder>().addComponents(roleSelect);
+        await (interaction as StringSelectMenuInteraction).update({ components: [row] });
+        return; // Don't save incomplete 'role:' to DB
       }
-      saveSettings(settings);
     } else if (customId === 'setup_role_select') {
       const sel = interaction as RoleSelectMenuInteraction;
       settings.mentionTarget = `role:${sel.values[0]}`;
