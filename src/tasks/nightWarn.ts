@@ -43,7 +43,31 @@ export function rescheduleGuild(client: Client, guildId: string): void {
         }
       }
 
-      await channel.send(prefix + msg);
+      const fullMessage = prefix + msg;
+      
+      // Check if message exceeds Discord's 2000 character limit
+      if (fullMessage.length > 2000) {
+        // Fallback: try to truncate mentions or send without mention
+        if (prefix.length > 0) {
+          // Try sending with limited mentions (fallback)
+          const maxPrefixLength = 1800 - msg.length;
+          if (maxPrefixLength > 0) {
+            const truncatedPrefix = truncateMentions(prefix, maxPrefixLength);
+            const truncatedMsg = truncatedPrefix + msg;
+            if (truncatedMsg.length <= 2000) {
+              await channel.send(truncatedMsg);
+              return;
+            }
+          }
+          // If still too long, send message without mentions
+          await channel.send(msg);
+        } else {
+          // No prefix; message itself is too long (unlikely but handle it)
+          await channel.send(msg.substring(0, 2000));
+        }
+      } else {
+        await channel.send(fullMessage);
+      }
     } catch (err) {
       console.error(`[NightWarn] Error for guild ${guildId}:`, err);
     }
@@ -51,6 +75,22 @@ export function rescheduleGuild(client: Client, guildId: string): void {
 
   scheduledTasks.set(guildId, task);
   console.log(`[NightWarn] Scheduled for guild ${guildId} at ${warnHour}:${String(warnMinute).padStart(2, '0')}`);
+}
+
+/**
+ * Truncates mention string to fit within maxLength, removing partial mentions at the end.
+ * Preserves complete mentions only.
+ */
+function truncateMentions(mentions: string, maxLength: number): string {
+  if (mentions.length <= maxLength) return mentions;
+  
+  const truncated = mentions.substring(0, maxLength);
+  // Find the last complete mention and truncate there
+  const lastMentionEnd = truncated.lastIndexOf('>');
+  if (lastMentionEnd > 0) {
+    return truncated.substring(0, lastMentionEnd + 1) + ' ';
+  }
+  return '';
 }
 
 /**
