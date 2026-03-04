@@ -36,7 +36,6 @@
     "typescript": "^5.9.3"
   },
   "overrides": {
-    "discord.js": "^14.25.1",
     "undici": "^6.23.0"
   }
 }
