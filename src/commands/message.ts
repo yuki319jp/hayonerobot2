@@ -4,7 +4,7 @@ import {
   SlashCommandBuilder,
   StringSelectMenuBuilder,
 } from 'discord.js';
-import { getSettings, saveSettings, getSchedules } from '../database';
+import { getSettingsAsync, saveSettingsAsync } from '../database';
 import { t } from '../i18n';
 import { checkAdminPermission } from '../utils/permissions';
 
@@ -32,67 +32,20 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
   if (!(await checkAdminPermission(interaction))) return;
 
   const guildId = interaction.guildId!;
-  const settings = getSettings(guildId);
+  const settings = await getSettingsAsync(guildId);
   const lang = settings.language;
 
   const text = interaction.options.getString('text');
 
-  // If a direct text argument is provided, update the server-wide message (legacy behaviour).
-  if (text !== null) {
-    if (!text) {
-      settings.customMessage = null;
-      saveSettings(settings);
-      await interaction.reply({ content: t(lang, 'message.reset'), ephemeral: true });
-    } else {
-      settings.customMessage = text;
-      saveSettings(settings);
-      await interaction.reply({
-        content: t(lang, 'message.success', { message: text }),
-        ephemeral: true,
-      });
-    }
+  if (!text) {
+    settings.customMessage = null;
+    await saveSettingsAsync(settings);
+    await interaction.reply({ content: t(lang, 'message.reset'), ephemeral: true });
     return;
   }
 
-  // No argument → show interactive select menu for per-schedule messages.
-  const schedules = getSchedules(guildId);
-  if (schedules.length === 0) {
-    await interaction.reply({ content: t(lang, 'message.no_schedules'), ephemeral: true });
-    return;
-  }
-
-  const isJa = lang === 'ja';
-
-  // Discord StringSelectMenu has a max of 25 options
-  const displaySchedules = schedules.slice(0, 25);
-  const options = displaySchedules.map((s) => {
-    const timeLabel = `${String(s.hour).padStart(2, '0')}:${String(s.minute).padStart(2, '0')}`;
-    const status = s.customMessage
-      ? `(${t(lang, 'message.status_set')})`
-      : `(${t(lang, 'message.status_none')})`;
-    return {
-      label: `${timeLabel} ${status}`,
-      description: s.customMessage
-        ? s.customMessage.substring(0, 50) + (s.customMessage.length > 50 ? '…' : '')
-        : (isJa ? 'クリックして設定する' : 'Click to configure'),
-      value: String(s.id),
-    };
-  });
-
-  const select = new StringSelectMenuBuilder()
-    .setCustomId('message_schedule_select')
-    .setPlaceholder(t(lang, 'message.select_placeholder'))
-    .addOptions(options);
-
-  const row = new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(select);
-
-  let content = `**${t(lang, 'message.select_title')}**`;
-  // If there are more than 25 schedules, add a notice
-  if (schedules.length > 25) {
-    const remaining = schedules.length - 25;
-    content += `\n⚠️ ${isJa ? `他${remaining}個のスケジュールがあります` : `+${remaining} more schedule(s) available`}`;
-  }
-
+  settings.customMessage = text;
+  await saveSettingsAsync(settings);
   await interaction.reply({
     content,
     components: [row],

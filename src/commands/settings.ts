@@ -3,7 +3,7 @@ import {
   EmbedBuilder,
   SlashCommandBuilder,
 } from 'discord.js';
-import { getSettings } from '../database';
+import { getSettingsAsync } from '../database';
 import { t, defaultMessage } from '../i18n';
 
 export const data = new SlashCommandBuilder()
@@ -13,7 +13,7 @@ export const data = new SlashCommandBuilder()
 
 export async function execute(interaction: ChatInputCommandInteraction): Promise<void> {
   const guildId = interaction.guildId!;
-  const s = getSettings(guildId);
+  const s = await getSettingsAsync(guildId);
   const lang = s.language;
 
   const channelDisplay = s.channelId ? `<#${s.channelId}>` : t(lang, 'settings.none');

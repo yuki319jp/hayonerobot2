@@ -1,67 +1,11 @@
-import initSqlJs, { Database as SqlJsDatabase } from 'sql.js';
-import path from 'path';
-import fs from 'fs';
-import { ServerSettings, Schedule } from '../types';
-import { encrypt, decrypt, encryptMessage, decryptMessage, EncryptedPayload } from './crypto';
-
-const DB_PATH = path.join(process.cwd(), 'data', 'hayonero2.db');
-
-let db: SqlJsDatabase;
+import { ServerSettings } from '../types';
+import { encrypt, decrypt, EncryptedPayload } from './crypto';
+import { getPrismaClient } from './prisma-client';
 
 export async function initDatabase(): Promise<void> {
-  const dir = path.dirname(DB_PATH);
-  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-
-  const SQL = await initSqlJs();
-  
-  if (fs.existsSync(DB_PATH)) {
-    const buffer = fs.readFileSync(DB_PATH);
-    db = new SQL.Database(buffer);
-  } else {
-    db = new SQL.Database();
-  }
-
-  db.run(`
-    CREATE TABLE IF NOT EXISTS server_settings (
-      guild_id TEXT PRIMARY KEY,
-      data     TEXT NOT NULL,
-      iv       TEXT NOT NULL,
-      tag      TEXT NOT NULL,
-      updated_at INTEGER NOT NULL DEFAULT (unixepoch())
-    );
-  `);
-
-  db.run(`
-    CREATE TABLE IF NOT EXISTS schedules (
-      id         INTEGER PRIMARY KEY AUTOINCREMENT,
-      guild_id   TEXT NOT NULL,
-      hour       INTEGER NOT NULL,
-      minute     INTEGER NOT NULL,
-      msg_data   TEXT,
-      msg_iv     TEXT,
-      msg_tag    TEXT,
-      enabled    INTEGER NOT NULL DEFAULT 1,
-      created_at INTEGER NOT NULL DEFAULT (unixepoch()),
-      UNIQUE(guild_id, hour, minute)
-    );
-  `);
-
-  // Migrate: for guilds that have a configured schedule in server_settings but no
-  // rows in the new schedules table, create the first schedule entry from existing data.
-  migrateSchedules();
-
-  saveDatabase();
-}
-
-function saveDatabase(): void {
-  const data = db.export();
-  const buffer = Buffer.from(data);
-  fs.writeFileSync(DB_PATH, buffer);
-}
-
-export function getDb(): SqlJsDatabase {
-  if (!db) throw new Error('Database not initialized');
-  return db;
+  const prisma = getPrismaClient();
+  // Verify DB connectivity; Prisma handles migrations via `prisma migrate`
+  await prisma.$connect();
 }
 
 export const DEFAULT_SETTINGS: Omit<ServerSettings, 'guildId'> = {
@@ -78,52 +22,60 @@ export const DEFAULT_SETTINGS: Omit<ServerSettings, 'guildId'> = {
 };
 
 export function getSettings(guildId: string): ServerSettings {
-  const db = getDb();
-  const stmt = db.prepare('SELECT data, iv, tag FROM server_settings WHERE guild_id = ?');
-  stmt.bind([guildId]);
-  
-  if (stmt.step()) {
-    const row = stmt.getAsObject() as { data: string; iv: string; tag: string };
-    stmt.free();
-    const result = decrypt(guildId, row as EncryptedPayload);
-    // backward compatibility: ensure excludedUserIds is always an array
-    if (!Array.isArray(result.excludedUserIds)) {
-      result.excludedUserIds = [];
-    }
-    return result;
-  }
-  
-  stmt.free();
-  return { guildId, ...DEFAULT_SETTINGS };
+  throw new Error(
+    'getSettings() is async in Prisma mode — use getSettingsAsync() instead'
+  );
 }
 
-export function saveSettings(settings: ServerSettings): void {
-  const db = getDb();
-  const payload = encrypt(settings.guildId, settings);
-  db.run(`
-    INSERT INTO server_settings (guild_id, data, iv, tag, updated_at)
-    VALUES (?, ?, ?, ?, unixepoch())
-    ON CONFLICT(guild_id) DO UPDATE SET
-      data = excluded.data,
-      iv   = excluded.iv,
-      tag  = excluded.tag,
-      updated_at = excluded.updated_at
-  `, [settings.guildId, payload.data, payload.iv, payload.tag]);
-  saveDatabase();
-}
+export async function getSettingsAsync(guildId: string): Promise<ServerSettings> {
+  const prisma = getPrismaClient();
+  const row = await prisma.serverSettings.findUnique({ where: { guildId } });
 
-export function getAllGuildIds(): string[] {
-  const db = getDb();
-  const stmt = db.prepare('SELECT guild_id FROM server_settings');
-  const result: string[] = [];
-  
-  while (stmt.step()) {
-    const row = stmt.getAsObject() as { guild_id: string };
-    result.push(row.guild_id);
+  if (!row) {
+    return { guildId, ...DEFAULT_SETTINGS };
   }
-  
-  stmt.free();
+
+  const payload: EncryptedPayload = {
+    data: row.data,
+    iv: row.iv,
+    tag: row.tag,
+  };
+
+  const result = decrypt(guildId, payload);
+  if (!Array.isArray(result.excludedUserIds)) {
+    result.excludedUserIds = [];
+  }
   return result;
+}
+
+export async function saveSettingsAsync(settings: ServerSettings): Promise<void> {
+  const prisma = getPrismaClient();
+  const payload = encrypt(settings.guildId, settings);
+
+  await prisma.serverSettings.upsert({
+    where: { guildId: settings.guildId },
+    create: {
+      guildId: settings.guildId,
+      data: payload.data,
+      iv: payload.iv,
+      tag: payload.tag,
+      keyVersion: 1,
+      updatedAt: Math.floor(Date.now() / 1000),
+    },
+    update: {
+      data: payload.data,
+      iv: payload.iv,
+      tag: payload.tag,
+      keyVersion: 1,
+      updatedAt: Math.floor(Date.now() / 1000),
+    },
+  });
+}
+
+export async function getAllGuildIdsAsync(): Promise<string[]> {
+  const prisma = getPrismaClient();
+  const rows = await prisma.serverSettings.findMany({ select: { guildId: true } });
+  return rows.map((r: { guildId: string }) => r.guildId);
 }
 
 // ─── Schedules CRUD ──────────────────────────────────────────────────────────
