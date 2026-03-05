@@ -1,6 +1,6 @@
 import cron, { ScheduledTask } from 'node-cron';
 import { Client, GuildMember, PresenceStatus, TextChannel } from 'discord.js';
-import { getAllGuildIds, getSettings, getSchedules, getScheduleById } from '../database';
+import { getAllGuildIdsAsync, getSettingsAsync } from '../database';
 import { defaultMessage } from '../i18n';
 import { sendAlert } from '../services/monitoring';
 
@@ -23,16 +23,12 @@ const FETCH_MEMBERS_TIMEOUT = 5000;
 // Key: `${guildId}:${hour}:${minute}` → task
 const scheduledTasks: Map<string, ScheduledTask> = new Map();
 
-export function rescheduleGuild(client: Client, guildId: string): void {
-  // Stop all existing tasks for this guild
-  for (const [key, task] of scheduledTasks) {
-    if (key.startsWith(`${guildId}:`)) {
-      task.stop();
-      scheduledTasks.delete(key);
-    }
-  }
+export async function rescheduleGuild(client: Client, guildId: string): Promise<void> {
+  // Stop old task if exists
+  scheduledTasks.get(guildId)?.stop();
+  scheduledTasks.delete(guildId);
 
-  const settings = getSettings(guildId);
+  const settings = await getSettingsAsync(guildId);
   if (!settings.enabled || !settings.channelId) return;
 
   const schedules = getSchedules(guildId);
@@ -50,7 +46,7 @@ function scheduleEntry(client: Client, guildId: string, schedule: Schedule): voi
 
   const task = cron.schedule(cronExpr, async () => {
     try {
-      const s = getSettings(guildId); // re-read in case settings changed
+      const s = await getSettingsAsync(guildId); // re-read in case settings changed
       if (!s.enabled || !s.channelId) return;
 
       const channel = await client.channels.fetch(s.channelId).catch(() => null);
@@ -180,8 +176,8 @@ async function buildOnlineMentions(
   }
 }
 
-export function scheduleAll(client: Client): void {
-  const guildIds = getAllGuildIds();
+export async function scheduleAll(client: Client): Promise<void> {
+  const guildIds = await getAllGuildIdsAsync();
   for (const guildId of guildIds) {
     rescheduleGuild(client, guildId);
   }

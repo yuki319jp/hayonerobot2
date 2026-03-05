@@ -2,8 +2,7 @@ import {
   ChatInputCommandInteraction,
   SlashCommandBuilder,
 } from 'discord.js';
-import { getSettings, saveSettings } from '../database';
-import { audit, AuditAction } from '../services/audit';
+import { getSettingsAsync, saveSettingsAsync } from '../database';
 
 export const data = new SlashCommandBuilder()
   .setName('exclude')
@@ -34,15 +33,14 @@ export const data = new SlashCommandBuilder()
 export async function execute(interaction: ChatInputCommandInteraction): Promise<void> {
   const guildId = interaction.guildId!;
   const userId = interaction.user.id;
-  const settings = getSettings(guildId);
+  const settings = await getSettingsAsync(guildId);
   const isJa = settings.language === 'ja';
   const subcommand = interaction.options.getSubcommand();
 
   if (subcommand === 'add') {
     if (!settings.excludedUserIds.includes(userId)) {
       settings.excludedUserIds.push(userId);
-      saveSettings(settings);
-      audit(AuditAction.EXCLUDE_ADD, { guildId, actor: userId });
+      await saveSettingsAsync(settings);
     }
     await interaction.reply({
       content: isJa
@@ -52,8 +50,7 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
     });
   } else if (subcommand === 'remove') {
     settings.excludedUserIds = settings.excludedUserIds.filter((id) => id !== userId);
-    saveSettings(settings);
-    audit(AuditAction.EXCLUDE_REMOVE, { guildId, actor: userId });
+    await saveSettingsAsync(settings);
     await interaction.reply({
       content: isJa
         ? '✅ メンション除外リストから削除しました。夜更かし警告でメンションされるようになります。'

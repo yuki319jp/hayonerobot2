@@ -10,7 +10,7 @@ import {
   SlashCommandBuilder,
   StringSelectMenuBuilder,
 } from 'discord.js';
-import { getSettings } from '../database';
+import { getSettingsAsync } from '../database';
 import { ServerSettings } from '../types';
 import { checkAdminPermission } from '../utils/permissions';
 
@@ -187,7 +187,7 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
   if (!(await checkAdminPermission(interaction))) return;
 
   const guildId = interaction.guildId!;
-  const settings = getSettings(guildId);
+  const settings = await getSettingsAsync(guildId);
   const { embeds, components } = buildSetupMessage(settings);
 
   await interaction.reply({ embeds, components, ephemeral: true });

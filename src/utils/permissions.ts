@@ -1,5 +1,5 @@
 import { ChatInputCommandInteraction, GuildMember, PermissionFlagsBits, MessageComponentInteraction, Interaction } from 'discord.js';
-import { getSettings } from '../database';
+import { getSettingsAsync } from '../database';
 import { t } from '../i18n';
 import type { TranslationKey } from '../i18n';
 
@@ -29,7 +29,7 @@ export async function checkAdminPermission(
     return true;
   }
 
-  const settings = getSettings(guildId);
+  const settings = await getSettingsAsync(guildId);
   if (settings.allowedRoleId && (member as GuildMember).roles.cache.has(settings.allowedRoleId)) {
     return true;
   }
@@ -47,7 +47,7 @@ async function sendErrorReply(
   messageKey: TranslationKey
 ): Promise<void> {
   try {
-    const settings = getSettings(guildId);
+    const settings = await getSettingsAsync(guildId);
     const errMsg = t(settings.language, messageKey);
     
     if (interaction.replied || interaction.deferred) {
