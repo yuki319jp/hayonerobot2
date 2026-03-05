@@ -2,7 +2,7 @@ import {
   ChatInputCommandInteraction,
   SlashCommandBuilder,
 } from 'discord.js';
-import { getSettings, saveSettings } from '../database';
+import { getSettingsAsync, saveSettingsAsync } from '../database';
 import { t } from '../i18n';
 import { checkAdminPermission } from '../utils/permissions';
 
@@ -24,20 +24,20 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
   if (!(await checkAdminPermission(interaction))) return;
 
   const guildId = interaction.guildId!;
-  const settings = getSettings(guildId);
+  const settings = await getSettingsAsync(guildId);
   const lang = settings.language;
 
   const channel = interaction.options.getChannel('channel');
 
   if (!channel) {
     settings.channelId = null;
-    saveSettings(settings);
+    await saveSettingsAsync(settings);
     await interaction.reply({ content: t(lang, 'channelset.cleared'), ephemeral: true });
     return;
   }
 
   settings.channelId = channel.id;
-  saveSettings(settings);
+  await saveSettingsAsync(settings);
   await interaction.reply({
     content: t(lang, 'channelset.success', { channel: `<#${channel.id}>` }),
     ephemeral: true,

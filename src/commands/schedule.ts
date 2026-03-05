@@ -3,7 +3,7 @@ import {
   EmbedBuilder,
   SlashCommandBuilder,
 } from 'discord.js';
-import { getSettings, saveSettings, DEFAULT_SETTINGS } from '../database';
+import { getSettingsAsync, saveSettingsAsync, DEFAULT_SETTINGS } from '../database';
 import { t } from '../i18n';
 import { checkAdminPermission } from '../utils/permissions';
 
@@ -53,7 +53,7 @@ export const data = new SlashCommandBuilder()
 
 export async function execute(interaction: ChatInputCommandInteraction): Promise<void> {
   const guildId = interaction.guildId!;
-  const settings = getSettings(guildId);
+  const settings = await getSettingsAsync(guildId);
   const lang = settings.language;
   const sub = interaction.options.getSubcommand();
 
@@ -104,21 +104,21 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
       settings.mentionEnabled = DEFAULT_SETTINGS.mentionEnabled;
       settings.mentionTarget = DEFAULT_SETTINGS.mentionTarget;
       settings.customMessage = DEFAULT_SETTINGS.customMessage;
-      saveSettings(settings);
+      await saveSettingsAsync(settings);
       await interaction.reply({ content: t(lang, 'schedule.deleted'), ephemeral: true });
       break;
     }
 
     case 'disable': {
       settings.enabled = false;
-      saveSettings(settings);
+      await saveSettingsAsync(settings);
       await interaction.reply({ content: t(lang, 'schedule.disabled'), ephemeral: true });
       break;
     }
 
     case 'enable': {
       settings.enabled = true;
-      saveSettings(settings);
+      await saveSettingsAsync(settings);
       await interaction.reply({ content: t(lang, 'schedule.enabled'), ephemeral: true });
       break;
     }

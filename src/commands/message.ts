@@ -2,7 +2,7 @@ import {
   ChatInputCommandInteraction,
   SlashCommandBuilder,
 } from 'discord.js';
-import { getSettings, saveSettings } from '../database';
+import { getSettingsAsync, saveSettingsAsync } from '../database';
 import { t } from '../i18n';
 import { checkAdminPermission } from '../utils/permissions';
 
@@ -30,20 +30,20 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
   if (!(await checkAdminPermission(interaction))) return;
 
   const guildId = interaction.guildId!;
-  const settings = getSettings(guildId);
+  const settings = await getSettingsAsync(guildId);
   const lang = settings.language;
 
   const text = interaction.options.getString('text');
 
   if (!text) {
     settings.customMessage = null;
-    saveSettings(settings);
+    await saveSettingsAsync(settings);
     await interaction.reply({ content: t(lang, 'message.reset'), ephemeral: true });
     return;
   }
 
   settings.customMessage = text;
-  saveSettings(settings);
+  await saveSettingsAsync(settings);
   await interaction.reply({
     content: t(lang, 'message.success', { message: text }),
     ephemeral: true,

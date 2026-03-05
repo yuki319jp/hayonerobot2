@@ -17,7 +17,7 @@ import {
   TextInputBuilder,
   TextInputStyle,
 } from 'discord.js';
-import { initDatabase, getSettings, saveSettings } from './database';
+import { initDatabase, getSettingsAsync, saveSettingsAsync } from './database';
 import { commands } from './commands';
 import { scheduleAll, rescheduleGuild } from './tasks/nightWarn';
 import { t } from './i18n';
@@ -34,7 +34,7 @@ const client = new Client({
 
 client.once(Events.ClientReady, (readyClient) => {
   console.log(`✅ Logged in as ${readyClient.user.tag}`);
-  scheduleAll(readyClient);
+  scheduleAll(readyClient).catch(console.error);
 });
 
 client.on(Events.InteractionCreate, async (interaction: Interaction) => {
@@ -69,11 +69,11 @@ client.on(Events.InteractionCreate, async (interaction: Interaction) => {
 
     // After any settings-mutating command, reschedule the guild's cron task
     if (['setup', 'channelset', 'mention', 'schedule'].includes(interaction.commandName)) {
-      rescheduleGuild(client, interaction.guildId);
+      await rescheduleGuild(client, interaction.guildId);
     }
   } catch (err) {
     console.error(`[Command:${interaction.commandName}]`, err);
-    const settings = getSettings(interaction.guildId);
+    const settings = await getSettingsAsync(interaction.guildId);
     const errMsg = t(settings.language, 'error.general');
     if (interaction.replied || interaction.deferred) {
       await interaction.followUp({ content: errMsg, ephemeral: true });
@@ -92,24 +92,24 @@ async function handleSetupComponent(
   if (!(await checkAdminPermission(interaction as MessageComponentInteraction))) return;
 
   const guildId = interaction.guildId;
-  const settings = getSettings(guildId);
+  const settings = await getSettingsAsync(guildId);
   const customId = interaction.customId;
 
   try {
     if (customId === 'setup_channel_select') {
       const sel = interaction as ChannelSelectMenuInteraction;
       settings.channelId = sel.values[0] ?? null;
-      saveSettings(settings);
-      rescheduleGuild(client, guildId);
+      await saveSettingsAsync(settings);
+      await rescheduleGuild(client, guildId);
     } else if (customId === 'setup_mention_target') {
       const sel = interaction as StringSelectMenuInteraction;
       const value = sel.values[0];
       if (value === 'online') {
         settings.mentionTarget = 'online';
-        saveSettings(settings);
+        await saveSettingsAsync(settings);
       } else if (value === 'none') {
         settings.mentionTarget = null;
-        saveSettings(settings);
+        await saveSettingsAsync(settings);
       } else if (value === 'role') {
         // Show RoleSelectMenu but don't save incomplete value to DB yet
         const isJa = settings.language === 'ja';
@@ -126,21 +126,21 @@ async function handleSetupComponent(
     } else if (customId === 'setup_role_select') {
       const sel = interaction as RoleSelectMenuInteraction;
       settings.mentionTarget = `role:${sel.values[0]}`;
-      saveSettings(settings);
+      await saveSettingsAsync(settings);
     } else if (customId === 'setup_enable') {
       settings.enabled = true;
-      saveSettings(settings);
-      rescheduleGuild(client, guildId);
+      await saveSettingsAsync(settings);
+      await rescheduleGuild(client, guildId);
     } else if (customId === 'setup_disable') {
       settings.enabled = false;
-      saveSettings(settings);
-      rescheduleGuild(client, guildId);
+      await saveSettingsAsync(settings);
+      await rescheduleGuild(client, guildId);
     } else if (customId === 'setup_mention_on') {
       settings.mentionEnabled = true;
-      saveSettings(settings);
+      await saveSettingsAsync(settings);
     } else if (customId === 'setup_mention_off') {
       settings.mentionEnabled = false;
-      saveSettings(settings);
+      await saveSettingsAsync(settings);
     } else if (customId === 'setup_time_msg') {
       // Open modal for time and message configuration
       const isJa = settings.language === 'ja';
@@ -179,7 +179,7 @@ async function handleSetupComponent(
     }
 
     // Update the setup message with refreshed settings
-    const updatedSettings = getSettings(guildId);
+    const updatedSettings = await getSettingsAsync(guildId);
     const { embeds, components } = buildSetupMessage(updatedSettings);
     await (interaction as MessageComponentInteraction).update({ embeds, components });
   } catch (err) {
@@ -205,7 +205,7 @@ async function handleModalSubmit(interaction: ModalSubmitInteraction): Promise<v
 
   if (interaction.customId === 'setup_config_modal') {
     const guildId = interaction.guildId;
-    const settings = getSettings(guildId);
+    const settings = await getSettingsAsync(guildId);
 
     try {
       const warnTimeVal = interaction.fields.getTextInputValue('warn_time').trim();
@@ -234,8 +234,8 @@ async function handleModalSubmit(interaction: ModalSubmitInteraction): Promise<v
       const customMsgVal = interaction.fields.getTextInputValue('custom_message').trim();
       settings.customMessage = customMsgVal || null;
 
-      saveSettings(settings);
-      rescheduleGuild(client, guildId);
+      await saveSettingsAsync(settings);
+      await rescheduleGuild(client, guildId);
 
       const { embeds, components } = buildSetupMessage(settings);
       // Update original setup message if triggered from a component, otherwise reply

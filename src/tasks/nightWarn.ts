@@ -1,6 +1,6 @@
 import cron, { ScheduledTask } from 'node-cron';
 import { Client, GuildMember, PresenceStatus, TextChannel } from 'discord.js';
-import { getAllGuildIds, getSettings } from '../database';
+import { getAllGuildIdsAsync, getSettingsAsync } from '../database';
 import { defaultMessage } from '../i18n';
 
 /**
@@ -21,12 +21,12 @@ const FETCH_MEMBERS_TIMEOUT = 5000;
 
 const scheduledTasks: Map<string, ScheduledTask> = new Map();
 
-export function rescheduleGuild(client: Client, guildId: string): void {
+export async function rescheduleGuild(client: Client, guildId: string): Promise<void> {
   // Stop old task if exists
   scheduledTasks.get(guildId)?.stop();
   scheduledTasks.delete(guildId);
 
-  const settings = getSettings(guildId);
+  const settings = await getSettingsAsync(guildId);
   if (!settings.enabled || !settings.channelId) return;
 
   const { warnHour, warnMinute } = settings;
@@ -34,7 +34,7 @@ export function rescheduleGuild(client: Client, guildId: string): void {
 
   const task = cron.schedule(cronExpr, async () => {
     try {
-      const s = getSettings(guildId); // re-read in case settings changed
+      const s = await getSettingsAsync(guildId); // re-read in case settings changed
       if (!s.enabled || !s.channelId) return;
 
       const channel = await client.channels.fetch(s.channelId).catch(() => null);
@@ -150,8 +150,8 @@ async function buildOnlineMentions(
   }
 }
 
-export function scheduleAll(client: Client): void {
-  const guildIds = getAllGuildIds();
+export async function scheduleAll(client: Client): Promise<void> {
+  const guildIds = await getAllGuildIdsAsync();
   for (const guildId of guildIds) {
     rescheduleGuild(client, guildId);
   }
