@@ -1,6 +1,8 @@
 import {
+  ActionRowBuilder,
   ChatInputCommandInteraction,
   SlashCommandBuilder,
+  StringSelectMenuBuilder,
 } from 'discord.js';
 import { getSettingsAsync, saveSettingsAsync } from '../database';
 import { t } from '../i18n';
@@ -17,13 +19,13 @@ export const data = new SlashCommandBuilder()
     o
       .setName('text')
       .setDescription(
-        'New message (leave empty to reset to default) / 新しいメッセージ（空でデフォルトに戻す）'
+        'Server-wide default message (leave empty to reset) / サーバー共通デフォルトメッセージ（空でリセット）'
       )
       .setDescriptionLocalizations({
-        ja: '新しいメッセージ（空でデフォルトに戻す）',
-        'en-US': 'New message (leave empty to reset to default)',
+        ja: 'サーバー共通デフォルトメッセージ（空でリセット）',
+        'en-US': 'Server-wide default message (leave empty to reset)',
       })
-      .setMaxLength(500)
+      .setMaxLength(1000)
   );
 
 export async function execute(interaction: ChatInputCommandInteraction): Promise<void> {
@@ -45,7 +47,8 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
   settings.customMessage = text;
   await saveSettingsAsync(settings);
   await interaction.reply({
-    content: t(lang, 'message.success', { message: text }),
+    content,
+    components: [row],
     ephemeral: true,
   });
 }

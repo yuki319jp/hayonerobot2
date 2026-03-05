@@ -2,6 +2,7 @@ import cron, { ScheduledTask } from 'node-cron';
 import { Client, GuildMember, PresenceStatus, TextChannel } from 'discord.js';
 import { getAllGuildIdsAsync, getSettingsAsync } from '../database';
 import { defaultMessage } from '../i18n';
+import { sendAlert } from '../services/monitoring';
 
 /**
  * For each guild, schedule a cron task at the configured warn time.
@@ -19,6 +20,7 @@ const MAX_ONLINE_MENTIONS = 50;
  */
 const FETCH_MEMBERS_TIMEOUT = 5000;
 
+// Key: `${guildId}:${hour}:${minute}` → task
 const scheduledTasks: Map<string, ScheduledTask> = new Map();
 
 export async function rescheduleGuild(client: Client, guildId: string): Promise<void> {
@@ -29,8 +31,18 @@ export async function rescheduleGuild(client: Client, guildId: string): Promise<
   const settings = await getSettingsAsync(guildId);
   if (!settings.enabled || !settings.channelId) return;
 
-  const { warnHour, warnMinute } = settings;
-  const cronExpr = `${warnMinute} ${warnHour} * * *`;
+  const schedules = getSchedules(guildId);
+  if (schedules.length === 0) return;
+
+  for (const schedule of schedules) {
+    if (!schedule.enabled) continue;
+    scheduleEntry(client, guildId, schedule);
+  }
+}
+
+function scheduleEntry(client: Client, guildId: string, schedule: Schedule): void {
+  const key = `${guildId}:${schedule.hour}:${schedule.minute}`;
+  const cronExpr = `${schedule.minute} ${schedule.hour} * * *`;
 
   const task = cron.schedule(cronExpr, async () => {
     try {
@@ -40,12 +52,22 @@ export async function rescheduleGuild(client: Client, guildId: string): Promise<
       const channel = await client.channels.fetch(s.channelId).catch(() => null);
       if (!channel || !(channel instanceof TextChannel)) return;
 
-      const msg = s.customMessage ?? defaultMessage(s.language);
+      // Re-fetch schedule to get latest customMessage (avoids closure stale values)
+      const latestSchedule = getScheduleById(schedule.id, guildId);
+      if (!latestSchedule) return;
 
+      // Priority: per-schedule message → server customMessage → system default
+      const formattedTime = `${String(latestSchedule.hour).padStart(2, '0')}:${String(latestSchedule.minute).padStart(2, '0')}`;
+      const rawMsg = latestSchedule.customMessage ?? s.customMessage ?? defaultMessage(s.language);
+
+      // Replace {user} and {time} placeholders (mention prefix handled separately)
+      let msg = rawMsg
+        .replace(/\{time\}/g, formattedTime);
+
+      // Build mention prefix
       let prefix = '';
       if (s.mentionEnabled && s.mentionTarget) {
         if (s.mentionTarget === 'online') {
-          // Mention all online non-bot users not in the exclude list
           prefix = await buildOnlineMentions(client, guildId, s.excludedUserIds ?? []);
         } else if (s.mentionTarget.startsWith('role:')) {
           prefix = `<@&${s.mentionTarget.slice(5)}> `;
@@ -54,13 +76,14 @@ export async function rescheduleGuild(client: Client, guildId: string): Promise<
         }
       }
 
-      const fullMessage = prefix + msg;
-      
+      // Replace {user} placeholder with mention prefix (without trailing space)
+      msg = msg.replace(/\{user\}/g, prefix.trimEnd());
+
+      const fullMessage = msg.includes(prefix.trimEnd()) ? msg : prefix + msg;
+
       // Check if message exceeds Discord's 2000 character limit
       if (fullMessage.length > 2000) {
-        // Fallback: try to truncate mentions or send without mention
         if (prefix.length > 0) {
-          // Try sending with limited mentions (fallback)
           const maxPrefixLength = 1800 - msg.length;
           if (maxPrefixLength > 0) {
             const truncatedPrefix = truncateMentions(prefix, maxPrefixLength);
@@ -70,10 +93,8 @@ export async function rescheduleGuild(client: Client, guildId: string): Promise<
               return;
             }
           }
-          // If still too long, send message without mentions
           await channel.send(msg);
         } else {
-          // No prefix; message itself is too long (unlikely but handle it)
           await channel.send(msg.substring(0, 2000));
         }
       } else {
@@ -81,11 +102,16 @@ export async function rescheduleGuild(client: Client, guildId: string): Promise<
       }
     } catch (err) {
       console.error(`[NightWarn] Error for guild ${guildId}:`, err);
+      sendAlert(`Night warn failed for guild ${guildId}`, {
+        severity: 'warning',
+        title: 'NightWarn Error',
+        detail: String(err),
+      }).catch(() => undefined);
     }
   });
 
-  scheduledTasks.set(guildId, task);
-  console.log(`[NightWarn] Scheduled for guild ${guildId} at ${warnHour}:${String(warnMinute).padStart(2, '0')}`);
+  scheduledTasks.set(key, task);
+  console.log(`[NightWarn] Scheduled for guild ${guildId} at ${schedule.hour}:${String(schedule.minute).padStart(2, '0')}`);
 }
 
 /**

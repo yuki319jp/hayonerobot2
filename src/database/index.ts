@@ -77,3 +77,169 @@ export async function getAllGuildIdsAsync(): Promise<string[]> {
   const rows = await prisma.serverSettings.findMany({ select: { guildId: true } });
   return rows.map((r: { guildId: string }) => r.guildId);
 }
+
+// ─── Schedules CRUD ──────────────────────────────────────────────────────────
+
+function rowToSchedule(guildId: string, row: Record<string, unknown>): Schedule {
+  let customMessage: string | null = null;
+  if (row.msg_data && row.msg_iv && row.msg_tag) {
+    customMessage = decryptMessage(guildId, {
+      data: row.msg_data as string,
+      iv: row.msg_iv as string,
+      tag: row.msg_tag as string,
+    });
+    // decryptMessage returns null on failure → falls back to guild-level message
+  }
+  return {
+    id: row.id as number,
+    guildId,
+    hour: row.hour as number,
+    minute: row.minute as number,
+    customMessage,
+    enabled: (row.enabled as number) === 1,
+  };
+}
+
+export function getSchedules(guildId: string): Schedule[] {
+  const db = getDb();
+  const stmt = db.prepare(
+    'SELECT id, hour, minute, msg_data, msg_iv, msg_tag, enabled FROM schedules WHERE guild_id = ? ORDER BY hour, minute'
+  );
+  stmt.bind([guildId]);
+  const result: Schedule[] = [];
+  while (stmt.step()) {
+    result.push(rowToSchedule(guildId, stmt.getAsObject() as Record<string, unknown>));
+  }
+  stmt.free();
+  return result;
+}
+
+export function getScheduleById(id: number, guildId: string): Schedule | null {
+  const db = getDb();
+  const stmt = db.prepare(
+    'SELECT id, hour, minute, msg_data, msg_iv, msg_tag, enabled FROM schedules WHERE id = ? AND guild_id = ?'
+  );
+  stmt.bind([id, guildId]);
+  if (stmt.step()) {
+    const s = rowToSchedule(guildId, stmt.getAsObject() as Record<string, unknown>);
+    stmt.free();
+    return s;
+  }
+  stmt.free();
+  return null;
+}
+
+/**
+ * Creates or updates a schedule for the given guild/time.
+ * If message is undefined, the existing custom_message is preserved.
+ * If message is null, it clears the custom_message.
+ * If message is a string, it is encrypted and stored.
+ */
+export function upsertSchedule(
+  guildId: string,
+  hour: number,
+  minute: number,
+  message?: string | null
+): Schedule {
+  const db = getDb();
+
+  let msgData: string | null = null;
+  let msgIv: string | null = null;
+  let msgTag: string | null = null;
+
+  if (message === null) {
+    // Explicitly clear message — keep nulls
+  } else if (typeof message === 'string') {
+    const payload = encryptMessage(guildId, message);
+    msgData = payload.data;
+    msgIv = payload.iv;
+    msgTag = payload.tag;
+  }
+
+  if (message !== undefined) {
+    db.run(
+      `INSERT INTO schedules (guild_id, hour, minute, msg_data, msg_iv, msg_tag)
+       VALUES (?, ?, ?, ?, ?, ?)
+       ON CONFLICT(guild_id, hour, minute) DO UPDATE SET
+         msg_data = excluded.msg_data,
+         msg_iv   = excluded.msg_iv,
+         msg_tag  = excluded.msg_tag`,
+      [guildId, hour, minute, msgData, msgIv, msgTag]
+    );
+  } else {
+    // Insert only; don't overwrite message if row exists
+    db.run(
+      `INSERT OR IGNORE INTO schedules (guild_id, hour, minute) VALUES (?, ?, ?)`,
+      [guildId, hour, minute]
+    );
+  }
+
+  saveDatabase();
+
+  // Return the saved record
+  const stmt = db.prepare(
+    'SELECT id, hour, minute, msg_data, msg_iv, msg_tag, enabled FROM schedules WHERE guild_id = ? AND hour = ? AND minute = ?'
+  );
+  stmt.bind([guildId, hour, minute]);
+  stmt.step();
+  const s = rowToSchedule(guildId, stmt.getAsObject() as Record<string, unknown>);
+  stmt.free();
+  return s;
+}
+
+export function setScheduleMessage(id: number, guildId: string, message: string | null): void {
+  const db = getDb();
+  if (message === null) {
+    db.run(
+      'UPDATE schedules SET msg_data = NULL, msg_iv = NULL, msg_tag = NULL WHERE id = ? AND guild_id = ?',
+      [id, guildId]
+    );
+  } else {
+    const payload = encryptMessage(guildId, message);
+    db.run(
+      'UPDATE schedules SET msg_data = ?, msg_iv = ?, msg_tag = ? WHERE id = ? AND guild_id = ?',
+      [payload.data, payload.iv, payload.tag, id, guildId]
+    );
+  }
+  saveDatabase();
+}
+
+export function deleteSchedule(id: number, guildId: string): void {
+  const db = getDb();
+  db.run('DELETE FROM schedules WHERE id = ? AND guild_id = ?', [id, guildId]);
+  saveDatabase();
+}
+
+export function deleteAllSchedules(guildId: string): void {
+  const db = getDb();
+  db.run('DELETE FROM schedules WHERE guild_id = ?', [guildId]);
+  saveDatabase();
+}
+
+/**
+ * One-time migration: for each guild already in server_settings,
+ * if no schedules exist, create one from the stored warnHour/warnMinute.
+ */
+function migrateSchedules(): void {
+  const guildIds = getAllGuildIds();
+  for (const guildId of guildIds) {
+    try {
+      const countStmt = db.prepare('SELECT COUNT(*) AS cnt FROM schedules WHERE guild_id = ?');
+      countStmt.bind([guildId]);
+      countStmt.step();
+      const cnt = (countStmt.getAsObject() as { cnt: number }).cnt;
+      countStmt.free();
+      if (cnt > 0) continue; // already has schedules
+
+      const settings = getSettings(guildId);
+      if (!settings.enabled && settings.warnHour === 0 && settings.warnMinute === 0) continue;
+      db.run(
+        'INSERT OR IGNORE INTO schedules (guild_id, hour, minute) VALUES (?, ?, ?)',
+        [guildId, settings.warnHour, settings.warnMinute]
+      );
+      console.log(`[DB] Migrated schedule for guild ${guildId}: ${settings.warnHour}:${String(settings.warnMinute).padStart(2, '0')}`);
+    } catch (err) {
+      console.error(`[DB] Migration failed for guild ${guildId}:`, err);
+    }
+  }
+}
