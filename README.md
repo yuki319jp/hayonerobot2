@@ -1,6 +1,6 @@
 # Hayonero2 🌙
 
-このプロジェクトは [Hayonero-Bot](https://github.com/yuki319jp/Hayonero-Bot) のリメイク（再実装）です。初代リポジトリは上記リンクを参照してください。
+[Hayonero-Bot](https://github.com/yuki319jp/Hayonero-Bot) のリメイク（再実装）です。初代リポジトリは上記リンクを参照してください。
 
 主な変更点（抜粋）:
 
@@ -14,39 +14,48 @@
 ## 日本語
 
 ### 概要
+
 Hayonero2 は、サーバー毎に設定した時刻に「夜更かしをやめましょう」とやさしく通知する Discord ボットです。TypeScript と discord.js を使って実装されており、設定は SQLite に AES-256-GCM で暗号化して保存されます。
 
 ### 主な機能
 
 - 毎日指定時刻に指定チャンネルへ警告メッセージを送信します。
-- メンションを ON/OFF でき、ロールまたはユーザーを指定できます（ロール優先）。
+- メンション機能：オンラインユーザー全員、特定のロール、またはメンションなしから選択可能。
+- ユーザーが `/exclude` コマンドで自分をメンション対象から除外可能。
 - サーバーごとにカスタムメッセージを設定可能。
 - 日本語／英語の応答に対応。
 - 設定は暗号化して保存され、ENCRYPTION_SECRET がなければ復号できません。
 - **スケジュール管理**: スケジュールの削除・一時無効化・有効化・一覧表示が可能。
 - **コマンド実行ロール**: サーバー管理者以外でも指定ロールを持つメンバーが管理コマンドを使用できます。
-- **セットアップフォーム**: `/setup form:true` でモーダルフォームを使って一度に全設定を行えます。
+- **インタラクティブセットアップ**: ボタンやセレクトメニューを使った直感的な設定画面。
 
 ### コマンド（概要）
 
+#### 全員が使用可能なコマンド
+
 - `/help` — ヘルプ（コマンド説明）
+- `/schedule list` — スケジュール情報を表示（全員利用可能）
+- `/exclude add` — 自分をメンション除外リストに追加
+- `/exclude remove` — メンション除外リストから自分を削除
 - `/settings` — 現在のサーバー設定を表示
-- `/setup` — 初期設定（言語、ON/OFF、警告時刻、チャンネル、ロール等すべて設定可）
-  - `form:true` オプション → モーダルフォームで対話的に設定
-  - `language` / `enabled` / `warn_hour` / `warn_minute` — 基本設定
-  - `channel` — 警告チャンネルをここで設定可能
-  - `allowed_role` / `clear_allowed_role` — 管理コマンド実行ロールの設定
-  - `mention_enabled` / `mention_role` / `mention_user` — メンション設定
+
+#### 管理者のみが使用可能なコマンド
+
+以下のコマンドは **サーバー管理者権限**（Manage Server）または `/setup` で設定した **コマンド実行ロール** が必要です。
+
+- `/setup` — インタラクティブセットアップ（ボタン・セレクトメニュー操作で設定変更）
+  - チャンネル選択
+  - メンション対象の設定（オンラインユーザー全員 / ロール / なし）
+  - 有効化・無効化
+  - 警告時刻・カスタムメッセージの設定
 - `/channelset` — 警告を送るチャンネルを設定（空でクリア）
 - `/message` — カスタムメッセージの設定またはリセット
-- `/mention` — メンションの ON/OFF と対象（ロール/ユーザー）設定
+- `/mention` — メンション機能の ON/OFF 設定
 - `/schedule` — スケジュール管理
   - `list` — 現在のスケジュール情報を表示（全員利用可能）
   - `disable` — スケジュールを一時的に無効化
   - `enable` — スケジュールを再び有効化
   - `delete` — スケジュール設定をすべてリセット
-
-各コマンドはサーバー管理者権限（Manage Server）または `/setup` で設定した **コマンド実行ロール** が必要です（`/schedule list` は全員利用可能）。
 
 ### セットアップ（日本語で詳しく）
 
@@ -118,40 +127,49 @@ npm start
 ## English
 
 ### Overview
+
 Hayonero2 is a Discord bot that gently warns users not to stay up too late. It runs on TypeScript using discord.js, schedules messages with node-cron, and stores per-server settings in an encrypted SQLite database.
 
-### Features (detailed)
+### Features
 
 - Sends a daily warning message at a configured time to a designated text channel.
-- Optional mention support: you can enable mentions and target either a role or a specific user (role takes precedence).
+- **Flexible mention support**: Choose between mentioning all online users, a specific role, or no mention at all.
+- **Mention exclusion**: Users can use `/exclude` to opt out of being mentioned in warnings.
 - Per-server customizable message and language (Japanese/English).
 - Settings are encrypted using AES-256-GCM and stored in `data/hayonero2.db`.
-- **Schedule management**: list, delete, temporarily disable, or re-enable the warning schedule.
+- **Schedule management**: list, temporarily disable, re-enable, or delete the warning schedule.
 - **Command role**: designate a role whose members can use admin commands without needing Manage Server permission.
-- **Setup form**: run `/setup form:true` to configure everything at once via a modal form.
+- **Interactive setup**: Configure settings easily using buttons and select menus.
 
 ### Commands
 
+#### Available to all users
+
 - `/help` — Display help and command summaries.
-- `/settings` — Show current server settings (includes command role).
-- `/setup` — Configure all major settings in one command:
-  - `form:true` option → opens a modal form for interactive setup
-  - `language` / `enabled` / `warn_hour` / `warn_minute` — basic settings
-  - `channel` — set warning channel directly in setup
-  - `allowed_role` / `clear_allowed_role` — set/clear the command role
-  - `mention_enabled` / `mention_role` / `mention_user` — mention settings
+- `/settings` — Show current server settings.
+- `/schedule list` — Display schedule information (available to everyone).
+- `/exclude add` — Add yourself to the mention exclude list.
+- `/exclude remove` — Remove yourself from the mention exclude list.
+
+#### Admin-only commands
+
+The following commands require **Manage Server** permission **or** the configured command role (set via admin commands).
+
+- `/setup` — Interactive setup interface with buttons and select menus for easy configuration.
+  - Select warning channel
+  - Choose mention target (all online users / specific role / none)
+  - Enable or disable the bot
+  - Set warning time and custom message
 - `/channelset` — Set (or clear) the channel that receives warnings.
 - `/message` — Set or reset the custom warning message.
-- `/mention` — Enable/disable mentions and set the mention target (role/user).
+- `/mention` — Configure mention settings (enable/disable and target type).
 - `/schedule` — Manage schedules:
   - `list` — show schedule info (available to everyone)
   - `disable` — temporarily disable the schedule
   - `enable` — re-enable the schedule
   - `delete` — reset all schedule settings to defaults
 
-Admin commands require Manage Server permission **or** the configured command role (set via `/setup allowed_role`). `/schedule list` is available to all members.
-
-### Installation & configuration
+### Installation & Configuration
 
 1. Clone and install dependencies:
 
@@ -189,13 +207,13 @@ npm run build
 npm start
 ```
 
-### Operational notes
+### Operational Notes
 
 - Database path: `data/hayonero2.db` (excluded from git via `.gitignore`).
 - Changing `ENCRYPTION_SECRET` will prevent decryption of previously saved settings — treat it as irreversible unless you manage key rotation carefully.
 - Make sure the bot has permissions to view and send messages in the configured channel.
 
-### Security details
+### Security Details
 
 - Key derivation: HKDF-SHA256 is used with `ENCRYPTION_SECRET` and the guild ID to derive a unique 256-bit key per guild.
 - Encryption: AES-256-GCM with a random IV per write and authenticated tag verification on read.
