@@ -17,12 +17,13 @@ import {
   TextInputBuilder,
   TextInputStyle,
 } from 'discord.js';
-import { initDatabase, getSettings, saveSettings } from './database';
+import { initDatabase, getSettings, saveSettings, getScheduleById, setScheduleMessage } from './database';
 import { commands } from './commands';
 import { scheduleAll, rescheduleGuild } from './tasks/nightWarn';
 import { t } from './i18n';
 import { buildSetupMessage } from './commands/setup';
 import { checkAdminPermission } from './utils/permissions';
+import { validateEnv } from './utils/env-validation';
 
 const client = new Client({
   intents: [
@@ -52,6 +53,24 @@ client.on(Events.InteractionCreate, async (interaction: Interaction) => {
     interaction.customId.startsWith('setup_')
   ) {
     await handleSetupComponent(interaction as AnySelectMenuInteraction | ButtonInteraction);
+    return;
+  }
+
+  // Handle per-schedule message: select menu
+  if (interaction.isStringSelectMenu() && interaction.customId === 'message_schedule_select') {
+    await handleMessageScheduleSelect(interaction as StringSelectMenuInteraction);
+    return;
+  }
+
+  // Handle per-schedule message: quick-set button from /schedule set
+  if (interaction.isButton() && interaction.customId.startsWith('schedule_set_msg:')) {
+    await handleScheduleSetMsgButton(interaction as ButtonInteraction);
+    return;
+  }
+
+  // Handle skip button from /schedule set prompt
+  if (interaction.isButton() && interaction.customId === 'schedule_set_msg_skip') {
+    await (interaction as ButtonInteraction).update({ content: '✅', components: [] });
     return;
   }
 
@@ -258,9 +277,122 @@ async function handleModalSubmit(interaction: ModalSubmitInteraction): Promise<v
     }
     return;
   }
+
+  // Handle per-schedule message modal submit
+  if (interaction.customId.startsWith('schedule_msg_modal:')) {
+    const scheduleId = parseInt(interaction.customId.split(':')[1], 10);
+    const guildId = interaction.guildId;
+    const settings = getSettings(guildId);
+    const lang = settings.language;
+
+    try {
+      const msgVal = interaction.fields.getTextInputValue('schedule_message').trim();
+      // Backend validation: max 1000 chars
+      if (msgVal.length > 1000) {
+        await interaction.reply({
+          content: t(lang, 'error.general'),
+          ephemeral: true,
+        });
+        return;
+      }
+
+      const schedule = getScheduleById(scheduleId, guildId);
+      if (!schedule) {
+        await interaction.reply({ content: t(lang, 'error.general'), ephemeral: true });
+        return;
+      }
+
+      const formattedTime = `${String(schedule.hour).padStart(2, '0')}:${String(schedule.minute).padStart(2, '0')}`;
+      setScheduleMessage(scheduleId, guildId, msgVal || null);
+      rescheduleGuild(client, guildId);
+
+      const responseKey = msgVal ? 'message.schedule_set' : 'message.schedule_cleared';
+      await interaction.reply({
+        content: t(lang, responseKey, { time: formattedTime }),
+        ephemeral: true,
+      });
+    } catch (err) {
+      console.error(`[ModalSubmit:schedule_msg_modal:${scheduleId}]`, err);
+      try {
+        const errMsg = t(getSettings(guildId).language, 'error.general');
+        if (interaction.replied || interaction.deferred) {
+          await interaction.followUp({ content: errMsg, ephemeral: true });
+        } else {
+          await interaction.reply({ content: errMsg, ephemeral: true });
+        }
+      } catch (_) { /* ignore */ }
+    }
+    return;
+  }
+}
+
+async function handleMessageScheduleSelect(
+  interaction: StringSelectMenuInteraction
+): Promise<void> {
+  if (!interaction.guildId) return;
+  if (!(await checkAdminPermission(interaction as MessageComponentInteraction))) return;
+
+  const guildId = interaction.guildId;
+  const settings = getSettings(guildId);
+  const lang = settings.language;
+  const scheduleId = parseInt(interaction.values[0], 10);
+  const schedule = getScheduleById(scheduleId, guildId);
+
+  if (!schedule) {
+    await interaction.update({ content: t(lang, 'error.general'), components: [] });
+    return;
+  }
+
+  await showScheduleMessageModal(interaction, schedule.id, schedule.hour, schedule.minute, schedule.customMessage, lang);
+}
+
+async function handleScheduleSetMsgButton(interaction: ButtonInteraction): Promise<void> {
+  if (!interaction.guildId) return;
+  if (!(await checkAdminPermission(interaction as MessageComponentInteraction))) return;
+
+  const guildId = interaction.guildId;
+  const settings = getSettings(guildId);
+  const lang = settings.language;
+  const scheduleId = parseInt(interaction.customId.split(':')[1], 10);
+  const schedule = getScheduleById(scheduleId, guildId);
+
+  if (!schedule) {
+    await interaction.update({ content: t(lang, 'error.general'), components: [] });
+    return;
+  }
+
+  await showScheduleMessageModal(interaction, schedule.id, schedule.hour, schedule.minute, schedule.customMessage, lang);
+}
+
+async function showScheduleMessageModal(
+  interaction: StringSelectMenuInteraction | ButtonInteraction,
+  scheduleId: number,
+  hour: number,
+  minute: number,
+  currentMessage: string | null,
+  lang: 'ja' | 'en'
+): Promise<void> {
+  const formattedTime = `${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}`;
+
+  const modal = new ModalBuilder()
+    .setCustomId(`schedule_msg_modal:${scheduleId}`)
+    .setTitle(t(lang, 'message.modal_title', { time: formattedTime }));
+
+  const msgInput = new TextInputBuilder()
+    .setCustomId('schedule_message')
+    .setLabel(t(lang, 'message.modal_label'))
+    .setStyle(TextInputStyle.Paragraph)
+    .setValue(currentMessage ?? '')
+    .setMaxLength(1000)
+    .setRequired(false);
+
+  modal.addComponents(new ActionRowBuilder<TextInputBuilder>().addComponents(msgInput));
+  await interaction.showModal(modal);
 }
 
 async function main(): Promise<void> {
+  validateEnv();
+
   await initDatabase();
   console.log('✅ Database initialized');
 
