@@ -20,6 +20,7 @@ import {
 import { initDatabase, getSettings, saveSettings } from './database';
 import { commands } from './commands';
 import { scheduleAll, rescheduleGuild } from './tasks/nightWarn';
+import { scheduleBackup } from './tasks/backup';
 import { t } from './i18n';
 import { buildSetupMessage } from './commands/setup';
 import { checkAdminPermission } from './utils/permissions';
@@ -263,6 +264,8 @@ async function handleModalSubmit(interaction: ModalSubmitInteraction): Promise<v
 async function main(): Promise<void> {
   await initDatabase();
   console.log('✅ Database initialized');
+
+  scheduleBackup();
 
   const token = process.env.DISCORD_TOKEN;
   if (!token) throw new Error('DISCORD_TOKEN is not set in environment');
