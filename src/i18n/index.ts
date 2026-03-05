@@ -23,6 +23,15 @@ export type TranslationKey =
   | 'channelset.no_channel'
   | 'message.success'
   | 'message.reset'
+  | 'message.select_placeholder'
+  | 'message.select_title'
+  | 'message.modal_title'
+  | 'message.modal_label'
+  | 'message.no_schedules'
+  | 'message.schedule_set'
+  | 'message.schedule_cleared'
+  | 'message.status_set'
+  | 'message.status_none'
   | 'mention.enabled'
   | 'mention.disabled'
   | 'mention.target_set'
@@ -34,6 +43,10 @@ export type TranslationKey =
   | 'schedule.status'
   | 'schedule.time'
   | 'schedule.channel'
+  | 'schedule.set_success'
+  | 'schedule.message_label'
+  | 'schedule.message_none'
+  | 'schedule.set_message_prompt'
   | 'settings.title'
   | 'settings.language'
   | 'settings.status'
@@ -76,6 +89,15 @@ const ja: Translations = {
   'channelset.no_channel': '⚠️ チャンネルが指定されていません。',
   'message.success': '✅ メッセージを変更しました:\n> {message}',
   'message.reset': '✅ メッセージをデフォルトに戻しました。',
+  'message.select_placeholder': 'メッセージを設定する時刻を選択してください',
+  'message.select_title': '📝 個別メッセージ設定',
+  'message.modal_title': '{time} のメッセージ設定',
+  'message.modal_label': 'メッセージ（空でサーバー共通設定を使用）',
+  'message.no_schedules': '⚠️ スケジュールが設定されていません。先に `/schedule set` で時刻を登録してください。',
+  'message.schedule_set': '✅ {time} のメッセージを保存しました。',
+  'message.schedule_cleared': '✅ {time} の個別メッセージを削除しました。共通設定を使用します。',
+  'message.status_set': '個別設定済み',
+  'message.status_none': '未設定（共通設定を使用）',
   'mention.enabled': '🔔 メンションを **ON** にしました。',
   'mention.disabled': '🔕 メンションを **OFF** にしました。',
   'mention.target_set': '✅ メンション対象を {target} に設定しました。',
@@ -87,6 +109,10 @@ const ja: Translations = {
   'schedule.status': '状態',
   'schedule.time': '警告時刻',
   'schedule.channel': 'チャンネル',
+  'schedule.set_success': '✅ スケジュール {time} を設定しました。',
+  'schedule.message_label': 'メッセージ',
+  'schedule.message_none': '未設定（共通設定を使用）',
+  'schedule.set_message_prompt': 'この時間に専用のメッセージを設定しますか？',
   'settings.title': '⚙️ 現在の設定',
   'settings.language': '言語',
   'settings.status': 'Bot有効',
@@ -128,6 +154,15 @@ const en: Translations = {
   'channelset.no_channel': '⚠️ No channel specified.',
   'message.success': '✅ Message updated:\n> {message}',
   'message.reset': '✅ Message reset to default.',
+  'message.select_placeholder': 'Select the time to configure a message for',
+  'message.select_title': '📝 Per-Schedule Message',
+  'message.modal_title': 'Message for {time}',
+  'message.modal_label': 'Message (empty = use server default)',
+  'message.no_schedules': '⚠️ No schedules configured. Use `/schedule set` first.',
+  'message.schedule_set': '✅ Message for {time} saved.',
+  'message.schedule_cleared': '✅ Custom message for {time} removed. Using server default.',
+  'message.status_set': 'Custom message set',
+  'message.status_none': 'Not set (using server default)',
   'mention.enabled': '🔔 Mentions turned **ON**.',
   'mention.disabled': '🔕 Mentions turned **OFF**.',
   'mention.target_set': '✅ Mention target set to {target}.',
@@ -139,6 +174,10 @@ const en: Translations = {
   'schedule.status': 'Status',
   'schedule.time': 'Warning Time',
   'schedule.channel': 'Channel',
+  'schedule.set_success': '✅ Schedule {time} has been set.',
+  'schedule.message_label': 'Message',
+  'schedule.message_none': 'Not set (using server default)',
+  'schedule.set_message_prompt': 'Would you like to set a custom message for this time?',
   'settings.title': '⚙️ Current Settings',
   'settings.language': 'Language',
   'settings.status': 'Bot Enabled',
