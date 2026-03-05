@@ -14,6 +14,17 @@ export interface ServerSettings {
   allowedRoleId: string | null; // role allowed to use admin commands
 }
 
+/** A single time-based warning schedule entry. */
+export interface Schedule {
+  id: number;
+  guildId: string;
+  hour: number;   // 0-23
+  minute: number; // 0-59
+  /** Per-schedule custom message (decrypted). null = fall back to guild customMessage. */
+  customMessage: string | null;
+  enabled: boolean;
+}
+
 export interface EncryptedRow {
   guild_id: string;
   data: string; // base64 encoded ciphertext
