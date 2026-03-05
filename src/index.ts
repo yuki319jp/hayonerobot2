@@ -23,7 +23,7 @@ import { scheduleAll, rescheduleGuild } from './tasks/nightWarn';
 import { t } from './i18n';
 import { buildSetupMessage } from './commands/setup';
 import { checkAdminPermission } from './utils/permissions';
-import { validateEnv } from './utils/env-validation';
+import { sendAlert } from './services/monitoring';
 
 const client = new Client({
   intents: [
@@ -402,7 +402,12 @@ async function main(): Promise<void> {
   await client.login(token);
 }
 
-main().catch((err) => {
+main().catch(async (err) => {
   console.error('Fatal error:', err);
+  await sendAlert('Bot startup failed', {
+    severity: 'critical',
+    title: 'Startup Error',
+    detail: String(err),
+  }).catch(() => undefined);
   process.exit(1);
 });
