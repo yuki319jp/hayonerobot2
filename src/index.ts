@@ -23,6 +23,7 @@ import { scheduleAll, rescheduleGuild } from './tasks/nightWarn';
 import { t } from './i18n';
 import { buildSetupMessage } from './commands/setup';
 import { checkAdminPermission } from './utils/permissions';
+import { validateEnv } from './utils/env-validation';
 
 const client = new Client({
   intents: [
@@ -261,6 +262,8 @@ async function handleModalSubmit(interaction: ModalSubmitInteraction): Promise<v
 }
 
 async function main(): Promise<void> {
+  validateEnv();
+
   await initDatabase();
   console.log('✅ Database initialized');
 
