@@ -1,4 +1,5 @@
-# Hayonero2 🌙
+# hayonerobot2
+Next-generation bot that alerts users staying on Discord late into the night 
 
 [Hayonero-Bot](https://github.com/yuki319jp/Hayonero-Bot) のリメイク（再実装）です。初代リポジトリは上記リンクを参照してください。
 
