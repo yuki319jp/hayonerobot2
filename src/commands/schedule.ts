@@ -6,6 +6,7 @@ import {
 import { getSettings, saveSettings, DEFAULT_SETTINGS } from '../database';
 import { t } from '../i18n';
 import { checkAdminPermission } from '../utils/permissions';
+import { audit, AuditAction } from '../services/audit';
 
 export const data = new SlashCommandBuilder()
   .setName('schedule')
@@ -105,6 +106,7 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
       settings.mentionTarget = DEFAULT_SETTINGS.mentionTarget;
       settings.customMessage = DEFAULT_SETTINGS.customMessage;
       saveSettings(settings);
+      audit(AuditAction.SCHEDULE_DELETE, { guildId, actor: interaction.user.id });
       await interaction.reply({ content: t(lang, 'schedule.deleted'), ephemeral: true });
       break;
     }
@@ -112,6 +114,7 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
     case 'disable': {
       settings.enabled = false;
       saveSettings(settings);
+      audit(AuditAction.SCHEDULE_DISABLE, { guildId, actor: interaction.user.id });
       await interaction.reply({ content: t(lang, 'schedule.disabled'), ephemeral: true });
       break;
     }
@@ -119,6 +122,7 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
     case 'enable': {
       settings.enabled = true;
       saveSettings(settings);
+      audit(AuditAction.SCHEDULE_ENABLE, { guildId, actor: interaction.user.id });
       await interaction.reply({ content: t(lang, 'schedule.enabled'), ephemeral: true });
       break;
     }

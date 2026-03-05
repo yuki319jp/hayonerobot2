@@ -3,6 +3,7 @@ import {
   SlashCommandBuilder,
 } from 'discord.js';
 import { getSettings, saveSettings } from '../database';
+import { audit, AuditAction } from '../services/audit';
 
 export const data = new SlashCommandBuilder()
   .setName('exclude')
@@ -41,6 +42,7 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
     if (!settings.excludedUserIds.includes(userId)) {
       settings.excludedUserIds.push(userId);
       saveSettings(settings);
+      audit(AuditAction.EXCLUDE_ADD, { guildId, actor: userId });
     }
     await interaction.reply({
       content: isJa
@@ -51,6 +53,7 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
   } else if (subcommand === 'remove') {
     settings.excludedUserIds = settings.excludedUserIds.filter((id) => id !== userId);
     saveSettings(settings);
+    audit(AuditAction.EXCLUDE_REMOVE, { guildId, actor: userId });
     await interaction.reply({
       content: isJa
         ? '✅ メンション除外リストから削除しました。夜更かし警告でメンションされるようになります。'
