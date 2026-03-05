@@ -94,13 +94,22 @@ export function getSettings(guildId: string): ServerSettings {
     }
     return result;
   }
-  
-  stmt.free();
-  return { guildId, ...DEFAULT_SETTINGS };
+
+  const payload: EncryptedPayload = {
+    data: row.data,
+    iv: row.iv,
+    tag: row.tag,
+  };
+
+  const result = decrypt(guildId, payload);
+  if (!Array.isArray(result.excludedUserIds)) {
+    result.excludedUserIds = [];
+  }
+  return result;
 }
 
-export function saveSettings(settings: ServerSettings): void {
-  const db = getDb();
+export async function saveSettingsAsync(settings: ServerSettings): Promise<void> {
+  const prisma = getPrismaClient();
   const payload = encrypt(settings.guildId, settings);
   db.run(`
     INSERT INTO server_settings (guild_id, data, iv, tag, key_version, updated_at)
@@ -115,18 +124,10 @@ export function saveSettings(settings: ServerSettings): void {
   saveDatabase();
 }
 
-export function getAllGuildIds(): string[] {
-  const db = getDb();
-  const stmt = db.prepare('SELECT guild_id FROM server_settings');
-  const result: string[] = [];
-  
-  while (stmt.step()) {
-    const row = stmt.getAsObject() as { guild_id: string };
-    result.push(row.guild_id);
-  }
-  
-  stmt.free();
-  return result;
+export async function getAllGuildIdsAsync(): Promise<string[]> {
+  const prisma = getPrismaClient();
+  const rows = await prisma.serverSettings.findMany({ select: { guildId: true } });
+  return rows.map((r: { guildId: string }) => r.guildId);
 }
 
 // ─── Schedules CRUD ──────────────────────────────────────────────────────────

@@ -1,0 +1,34 @@
+// Hayonero2 Prisma Schema
+//
+// DB_PROVIDER controls which database to use:
+//   sqlite      (default, for development / small deployments)
+//   postgresql  (for production deployments)
+//   mysql       (for MySQL / MariaDB deployments)
+//
+// Run scripts/switch-db.ts to update the provider and DATABASE_URL:
+//   npm run switch-db sqlite
+//   npm run switch-db postgresql
+//   npm run switch-db mysql
+//
+// Then regenerate the client:
+//   npx prisma generate
+//   npx prisma migrate dev   (or npx prisma db push for SQLite)
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+}
+
+model ServerSettings {
+  guildId    String  @id @map("guild_id")
+  data       String
+  iv         String
+  tag        String
+  keyVersion Int     @default(1) @map("key_version")
+  updatedAt  Int     @default(0) @map("updated_at")
+
+  @@map("server_settings")
+}

@@ -3,7 +3,7 @@ import {
   EmbedBuilder,
   SlashCommandBuilder,
 } from 'discord.js';
-import { getSettings } from '../database';
+import { getSettingsAsync } from '../database';
 import { t } from '../i18n';
 
 export const data = new SlashCommandBuilder()
@@ -12,7 +12,7 @@ export const data = new SlashCommandBuilder()
   .setDescriptionLocalizations({ ja: 'ヘルプを表示', 'en-US': 'Show help' });
 
 export async function execute(interaction: ChatInputCommandInteraction): Promise<void> {
-  const settings = getSettings(interaction.guildId!);
+  const settings = await getSettingsAsync(interaction.guildId!);
   const lang = settings.language;
 
   const embed = new EmbedBuilder()
