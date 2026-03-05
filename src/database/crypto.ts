@@ -50,3 +50,37 @@ export function decrypt(guildId: string, payload: EncryptedPayload): ServerSetti
   const decrypted = Buffer.concat([decipher.update(data), decipher.final()]);
   return JSON.parse(decrypted.toString('utf8')) as ServerSettings;
 }
+
+/** Encrypts a plain-text message string for a guild. */
+export function encryptMessage(guildId: string, message: string): EncryptedPayload {
+  const key = deriveKey(guildId);
+  const iv = crypto.randomBytes(IV_LENGTH);
+  const cipher = crypto.createCipheriv(ALGORITHM, key, iv);
+  const encrypted = Buffer.concat([cipher.update(message, 'utf8'), cipher.final()]);
+  const tag = cipher.getAuthTag();
+  return {
+    data: encrypted.toString('base64'),
+    iv: iv.toString('base64'),
+    tag: tag.toString('base64'),
+  };
+}
+
+/**
+ * Decrypts a per-schedule message string.
+ * Returns null (and logs an error) if decryption fails to avoid plaintext exposure.
+ */
+export function decryptMessage(guildId: string, payload: EncryptedPayload): string | null {
+  try {
+    const key = deriveKey(guildId);
+    const iv = Buffer.from(payload.iv, 'base64');
+    const tag = Buffer.from(payload.tag, 'base64');
+    const data = Buffer.from(payload.data, 'base64');
+    const decipher = crypto.createDecipheriv(ALGORITHM, key, iv);
+    decipher.setAuthTag(tag);
+    const decrypted = Buffer.concat([decipher.update(data), decipher.final()]);
+    return decrypted.toString('utf8');
+  } catch (err) {
+    console.error(`[Crypto] Failed to decrypt message for guild ${guildId}:`, err);
+    return null;
+  }
+}
