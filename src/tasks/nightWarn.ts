@@ -2,6 +2,7 @@ import cron, { ScheduledTask } from 'node-cron';
 import { Client, GuildMember, PresenceStatus, TextChannel } from 'discord.js';
 import { getAllGuildIds, getSettings } from '../database';
 import { defaultMessage } from '../i18n';
+import { sendAlert } from '../services/monitoring';
 
 /**
  * For each guild, schedule a cron task at the configured warn time.
@@ -81,6 +82,11 @@ export function rescheduleGuild(client: Client, guildId: string): void {
       }
     } catch (err) {
       console.error(`[NightWarn] Error for guild ${guildId}:`, err);
+      sendAlert(`Night warn failed for guild ${guildId}`, {
+        severity: 'warning',
+        title: 'NightWarn Error',
+        detail: String(err),
+      }).catch(() => undefined);
     }
   });
 
