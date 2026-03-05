@@ -303,6 +303,7 @@ async function handleModalSubmit(interaction: ModalSubmitInteraction): Promise<v
 
       const formattedTime = `${String(schedule.hour).padStart(2, '0')}:${String(schedule.minute).padStart(2, '0')}`;
       setScheduleMessage(scheduleId, guildId, msgVal || null);
+      rescheduleGuild(client, guildId);
 
       const responseKey = msgVal ? 'message.schedule_set' : 'message.schedule_cleared';
       await interaction.reply({

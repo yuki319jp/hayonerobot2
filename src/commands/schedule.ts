@@ -112,7 +112,8 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
       const messageOpt = interaction.options.getString('message');
       const schedule = upsertSchedule(guildId, h, m, messageOpt ?? undefined);
 
-      // Also keep server_settings warnHour/warnMinute in sync with the first schedule
+      // Update server-wide warnHour/warnMinute for backward compatibility
+      // Note: These values are set to the last /schedule set time, not the first schedule
       settings.warnHour = h;
       settings.warnMinute = m;
       saveSettings(settings);
@@ -172,7 +173,10 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
       if (schedules.length === 0) {
         embed.setDescription(t(lang, 'schedule.no_schedule'));
       } else {
-        for (const s of schedules) {
+        // Discord Embed field limit is 25; we already have 2 fields (status, channel)
+        // So we can add max 23 schedule fields
+        const displaySchedules = schedules.slice(0, 23);
+        for (const s of displaySchedules) {
           const timeLabel = `${String(s.hour).padStart(2, '0')}:${String(s.minute).padStart(2, '0')}`;
           const statusIcon = s.enabled ? '✅' : '⏸️';
           const msgStatus = s.customMessage
@@ -181,6 +185,16 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
           embed.addFields({
             name: `${statusIcon} ${timeLabel}`,
             value: `${t(lang, 'schedule.message_label')}: ${msgStatus}`,
+            inline: false,
+          });
+        }
+        
+        // If there are more than 23 schedules, add a notice
+        if (schedules.length > 23) {
+          const remaining = schedules.length - 23;
+          embed.addFields({
+            name: '⚠️ ' + (lang === 'ja' ? '追加スケジュール' : 'More Schedules'),
+            value: lang === 'ja' ? `他${remaining}個のスケジュールがあります` : `+${remaining} more schedule(s)`,
             inline: false,
           });
         }

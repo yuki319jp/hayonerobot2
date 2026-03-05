@@ -1,6 +1,6 @@
 import cron, { ScheduledTask } from 'node-cron';
 import { Client, GuildMember, PresenceStatus, TextChannel } from 'discord.js';
-import { getAllGuildIds, getSettings, getSchedules } from '../database';
+import { getAllGuildIds, getSettings, getSchedules, getScheduleById } from '../database';
 import { defaultMessage } from '../i18n';
 import { Schedule } from '../types';
 
@@ -56,9 +56,13 @@ function scheduleEntry(client: Client, guildId: string, schedule: Schedule): voi
       const channel = await client.channels.fetch(s.channelId).catch(() => null);
       if (!channel || !(channel instanceof TextChannel)) return;
 
+      // Re-fetch schedule to get latest customMessage (avoids closure stale values)
+      const latestSchedule = getScheduleById(schedule.id, guildId);
+      if (!latestSchedule) return;
+
       // Priority: per-schedule message → server customMessage → system default
-      const formattedTime = `${String(schedule.hour).padStart(2, '0')}:${String(schedule.minute).padStart(2, '0')}`;
-      const rawMsg = schedule.customMessage ?? s.customMessage ?? defaultMessage(s.language);
+      const formattedTime = `${String(latestSchedule.hour).padStart(2, '0')}:${String(latestSchedule.minute).padStart(2, '0')}`;
+      const rawMsg = latestSchedule.customMessage ?? s.customMessage ?? defaultMessage(s.language);
 
       // Replace {user} and {time} placeholders (mention prefix handled separately)
       let msg = rawMsg

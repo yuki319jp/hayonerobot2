@@ -63,7 +63,9 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
 
   const isJa = lang === 'ja';
 
-  const options = schedules.map((s) => {
+  // Discord StringSelectMenu has a max of 25 options
+  const displaySchedules = schedules.slice(0, 25);
+  const options = displaySchedules.map((s) => {
     const timeLabel = `${String(s.hour).padStart(2, '0')}:${String(s.minute).padStart(2, '0')}`;
     const status = s.customMessage
       ? `(${t(lang, 'message.status_set')})`
@@ -84,8 +86,15 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
 
   const row = new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(select);
 
+  let content = `**${t(lang, 'message.select_title')}**`;
+  // If there are more than 25 schedules, add a notice
+  if (schedules.length > 25) {
+    const remaining = schedules.length - 25;
+    content += `\n⚠️ ${isJa ? `他${remaining}個のスケジュールがあります` : `+${remaining} more schedule(s) available`}`;
+  }
+
   await interaction.reply({
-    content: `**${t(lang, 'message.select_title')}**`,
+    content,
     components: [row],
     ephemeral: true,
   });
