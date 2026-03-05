@@ -1,8 +1,9 @@
 import initSqlJs, { Database as SqlJsDatabase } from 'sql.js';
 import path from 'path';
 import fs from 'fs';
-import { ServerSettings, Schedule } from '../types';
-import { encrypt, decrypt, encryptMessage, decryptMessage, EncryptedPayload } from './crypto';
+import { ServerSettings } from '../types';
+import { encrypt, decrypt, EncryptedPayload } from './crypto';
+import { audit, AuditAction } from '../services/audit';
 
 const DB_PATH = path.join(process.cwd(), 'data', 'hayonero2.db');
 
@@ -110,6 +111,7 @@ export function saveSettings(settings: ServerSettings): void {
       updated_at = excluded.updated_at
   `, [settings.guildId, payload.data, payload.iv, payload.tag]);
   saveDatabase();
+  audit(AuditAction.SETTINGS_SAVE, { guildId: settings.guildId, actor: 'system' });
 }
 
 export function getAllGuildIds(): string[] {

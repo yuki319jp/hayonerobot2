@@ -23,7 +23,7 @@ import { scheduleAll, rescheduleGuild } from './tasks/nightWarn';
 import { t } from './i18n';
 import { buildSetupMessage } from './commands/setup';
 import { checkAdminPermission } from './utils/permissions';
-import { sendAlert } from './services/monitoring';
+import { audit, AuditAction } from './services/audit';
 
 const client = new Client({
   intents: [
@@ -35,6 +35,7 @@ const client = new Client({
 
 client.once(Events.ClientReady, (readyClient) => {
   console.log(`✅ Logged in as ${readyClient.user.tag}`);
+  audit(AuditAction.BOT_START, { actor: 'system', detail: { tag: readyClient.user.tag } });
   scheduleAll(readyClient);
 });
 
@@ -395,6 +396,7 @@ async function main(): Promise<void> {
 
   await initDatabase();
   console.log('✅ Database initialized');
+  audit(AuditAction.DB_INIT, { actor: 'system' });
 
   const token = process.env.DISCORD_TOKEN;
   if (!token) throw new Error('DISCORD_TOKEN is not set in environment');
