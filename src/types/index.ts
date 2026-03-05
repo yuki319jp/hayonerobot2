@@ -27,7 +27,8 @@ export interface Schedule {
 
 export interface EncryptedRow {
   guild_id: string;
-  data: string; // base64 encoded ciphertext
-  iv: string;   // base64 encoded IV
-  tag: string;  // base64 encoded auth tag
+  data: string;       // base64 encoded ciphertext
+  iv: string;         // base64 encoded IV
+  tag: string;        // base64 encoded auth tag
+  key_version: number; // key version used for encryption
 }
